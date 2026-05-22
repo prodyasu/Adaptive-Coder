@@ -1,0 +1,346 @@
+{
+  "schemaVersion": "eval-result/v1",
+  "generatedAt": "2026-05-22T02:40:21.071Z",
+  "source": {
+    "type": "markdown",
+    "path": "N4-RESULTS.md"
+  },
+  "run": {
+    "runId": "n4-heldout-2026-04-24",
+    "harnessVersion": "0.2.0",
+    "notes": [
+      "Reconstructed from existing N4 markdown tables; no new model evals."
+    ]
+  },
+  "pipelines": [
+    "raw_base",
+    "gen0_seed",
+    "gen18_evolved"
+  ],
+  "problems": [
+    {
+      "problemId": "binary-search",
+      "results": {
+        "raw_base": {
+          "passAt1": true,
+          "passAtN": true
+        },
+        "gen0_seed": {
+          "passAt1": true,
+          "passAtN": true
+        },
+        "gen18_evolved": {
+          "passAt1": true,
+          "passAtN": true
+        }
+      }
+    },
+    {
+      "problemId": "climbing-stairs",
+      "results": {
+        "raw_base": {
+          "passAt1": true,
+          "passAtN": true
+        },
+        "gen0_seed": {
+          "passAt1": true,
+          "passAtN": true
+        },
+        "gen18_evolved": {
+          "passAt1": true,
+          "passAtN": true
+        }
+      }
+    },
+    {
+      "problemId": "container-with-most-water",
+      "results": {
+        "raw_base": {
+          "passAt1": false,
+          "passAtN": false
+        },
+        "gen0_seed": {
+          "passAt1": false,
+          "passAtN": true
+        },
+        "gen18_evolved": {
+          "passAt1": true,
+          "passAtN": true
+        }
+      }
+    },
+    {
+      "problemId": "coin-change-ii",
+      "results": {
+        "raw_base": {
+          "passAt1": false,
+          "passAtN": false
+        },
+        "gen0_seed": {
+          "passAt1": false,
+          "passAtN": true
+        },
+        "gen18_evolved": {
+          "passAt1": true,
+          "passAtN": true
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "pass1": {
+      "runs": {
+        "raw_base": {
+          "label": "raw_base",
+          "n": 4,
+          "successes": 2,
+          "failures": 2,
+          "rate": 0.5,
+          "exactCI": {
+            "lower": 0.06758598648854308,
+            "upper": 0.9324140135114569,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 0,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 0.8333333333333334
+        },
+        "gen0_seed": {
+          "label": "gen0_seed",
+          "n": 4,
+          "successes": 2,
+          "failures": 2,
+          "rate": 0.5,
+          "exactCI": {
+            "lower": 0.06758598648854308,
+            "upper": 0.9324140135114569,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 0,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 0.8333333333333334
+        },
+        "gen18_evolved": {
+          "label": "gen18_evolved",
+          "n": 4,
+          "successes": 4,
+          "failures": 0,
+          "rate": 1,
+          "exactCI": {
+            "lower": 0.39763536438352554,
+            "upper": 1,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 1,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 1
+        }
+      },
+      "comparisons": {
+        "raw_base→gen0_seed": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 0,
+            "discordant": 0,
+            "pValue": 1,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0,
+            "pValue": 0.7571428571428571,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        },
+        "raw_base→gen18_evolved": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 2,
+            "discordant": 2,
+            "pValue": 0.25,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0.5,
+            "pValue": 0.21428571428571427,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        },
+        "gen0_seed→gen18_evolved": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 2,
+            "discordant": 2,
+            "pValue": 0.25,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0.5,
+            "pValue": 0.21428571428571427,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        }
+      }
+    },
+    "passN": {
+      "runs": {
+        "raw_base": {
+          "label": "raw_base",
+          "n": 4,
+          "successes": 2,
+          "failures": 2,
+          "rate": 0.5,
+          "exactCI": {
+            "lower": 0.06758598648854308,
+            "upper": 0.9324140135114569,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 0,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 0.8333333333333334
+        },
+        "gen0_seed": {
+          "label": "gen0_seed",
+          "n": 4,
+          "successes": 4,
+          "failures": 0,
+          "rate": 1,
+          "exactCI": {
+            "lower": 0.39763536438352554,
+            "upper": 1,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 1,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 1
+        },
+        "gen18_evolved": {
+          "label": "gen18_evolved",
+          "n": 4,
+          "successes": 4,
+          "failures": 0,
+          "rate": 1,
+          "exactCI": {
+            "lower": 0.39763536438352554,
+            "upper": 1,
+            "confidence": 0.95,
+            "method": "clopper-pearson"
+          },
+          "bootstrapCI": {
+            "lower": 1,
+            "upper": 1,
+            "confidence": 0.95,
+            "iterations": 10000,
+            "method": "bootstrap-percentile"
+          },
+          "passAt2": 1
+        }
+      },
+      "comparisons": {
+        "raw_base→gen0_seed": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 2,
+            "discordant": 2,
+            "pValue": 0.25,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0.5,
+            "pValue": 0.21428571428571427,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        },
+        "raw_base→gen18_evolved": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 2,
+            "discordant": 2,
+            "pValue": 0.25,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0.5,
+            "pValue": 0.21428571428571427,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        },
+        "gen0_seed→gen18_evolved": {
+          "paired": {
+            "aWins": 0,
+            "bWins": 0,
+            "discordant": 0,
+            "pValue": 1,
+            "alternative": "greater",
+            "method": "exact-mcnemar-binomial-sign"
+          },
+          "unpairedPermutation": {
+            "observedDiff": 0,
+            "pValue": 1,
+            "totalPermutations": 70,
+            "alternative": "greater",
+            "method": "exact-permutation-unpaired-binary"
+          }
+        }
+      }
+    }
+  },
+  "methodology": {
+    "statistics": [
+      "clopper-pearson",
+      "clopper-pearson exact binomial confidence intervals",
+      "seeded percentile bootstrap confidence intervals",
+      "Codex-style pass@k estimator",
+      "exact paired McNemar/binomial sign test for same-problem comparisons",
+      "exact unpaired permutation test for secondary comparison"
+    ],
+    "caveats": [
+      "N=4 is too small for asymptotic tests or strong generalization claims.",
+      "Machine-readable artifact may be reconstructed from markdown when source.type=markdown."
+    ]
+  }
+}

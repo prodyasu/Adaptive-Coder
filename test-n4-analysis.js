@@ -5,6 +5,7 @@
 import {
   extractResultMatrix,
   analyzeN4Results,
+  analyzeN4ResultArtifact,
   formatAnalysisMarkdown,
 } from './n4-analysis.js';
 
@@ -59,5 +60,17 @@ const markdown = formatAnalysisMarkdown(analysis);
 assert(markdown.includes('raw_base: 2/4'), 'formatted markdown includes raw_base count');
 assert(markdown.includes('gen18_evolved: 4/4'), 'formatted markdown includes gen18 count');
 assert(markdown.includes('p = 0.2500'), 'formatted markdown includes exact p-value');
+
+const artifact = analyzeN4ResultArtifact(fixture, {
+  runId: 'fixture-n4',
+  harnessVersion: '0.2.0',
+  source: { type: 'markdown', path: 'fixture.md' },
+  generatedAt: '2026-05-21T00:00:00.000Z',
+  bootstrapIterations: 500,
+  seed: 99,
+});
+assert(artifact.schemaVersion === 'eval-result/v1', 'artifact export uses eval-result schema');
+assert(artifact.problems[3].results.gen18_evolved.passAt1 === true, 'artifact includes problem pipeline booleans');
+assert(artifact.metrics.pass1.runs.raw_base.successes === 2, 'artifact includes stats summaries');
 
 console.log('🎉 n4-analysis tests passed.');

@@ -7,6 +7,7 @@ import {
   exactMcNemarTest,
   passAtK,
 } from './stats.js';
+import { buildResultArtifactFromMatrix } from './result-schema.js';
 
 const PIPELINES = ['raw_base', 'gen0_seed', 'gen18_evolved'];
 const METRIC_HEADINGS = {
@@ -121,6 +122,19 @@ export function analyzeN4Results(markdown, options = {}) {
   };
 }
 
+export function analyzeN4ResultArtifact(markdown, options = {}) {
+  const matrix = extractResultMatrix(markdown);
+  return buildResultArtifactFromMatrix(matrix, {
+    runId: options.runId ?? 'n4-heldout-2026-04-24',
+    harnessVersion: options.harnessVersion ?? '0.2.0',
+    source: options.source ?? { type: 'markdown', path: 'N4-RESULTS.md' },
+    generatedAt: options.generatedAt,
+    bootstrapIterations: options.bootstrapIterations ?? 10000,
+    seed: options.seed ?? 20260521,
+    notes: options.notes ?? ['Reconstructed from existing N4 markdown tables; no new model evals.'],
+  });
+}
+
 function fmtCI(ci) {
   return `[${ci.lower.toFixed(4)}, ${ci.upper.toFixed(4)}]`;
 }
@@ -158,13 +172,19 @@ export function formatAnalysisMarkdown(analysis) {
 }
 
 function main() {
-  const input = process.argv[2] ?? 'N4-RESULTS.md';
-  const output = process.argv[3];
+  const args = process.argv.slice(2);
+  const json = args.includes('--json');
+  const positional = args.filter((arg) => arg !== '--json');
+  const input = positional[0] ?? 'N4-RESULTS.md';
+  const output = positional[1];
   const markdown = fs.readFileSync(input, 'utf8');
-  const analysis = analyzeN4Results(markdown);
-  const report = formatAnalysisMarkdown(analysis);
-  if (output) fs.writeFileSync(output, report);
-  else process.stdout.write(report);
+  const rendered = json || output?.endsWith('.json')
+    ? JSON.stringify(analyzeN4ResultArtifact(markdown, {
+      source: { type: 'markdown', path: input },
+    }), null, 2) + '\n'
+    : formatAnalysisMarkdown(analyzeN4Results(markdown));
+  if (output) fs.writeFileSync(output, rendered);
+  else process.stdout.write(rendered);
 }
 
 const currentFile = fileURLToPath(import.meta.url);
