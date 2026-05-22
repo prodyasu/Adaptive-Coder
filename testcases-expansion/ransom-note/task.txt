@@ -1,0 +1,10 @@
+Given strings magazine and ransom, return true if ransom can be built from characters in magazine.
+Each character in magazine can only be used once.
+
+Examples:
+- ransom="a", magazine="b" → false
+- ransom="aa", magazine="aab" → true
+
+Constraints:
+- 1 <= ransom.length, magazine.length <= 10^5
+- ransom and magazine consist of lowercase English letters

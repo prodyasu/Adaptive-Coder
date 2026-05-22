@@ -1,0 +1,19 @@
+Design a stack that supports push, pop, top, and retrieving the minimum element.
+All operations must be O(1).
+
+Implement:
+- MinStack() — initializes the stack
+- push(val) — pushes element onto stack
+- pop() — removes top element
+- top() — returns top element
+- getMin() — retrieves minimum element in O(1)
+
+Example:
+minStack = new MinStack()
+minStack.push(-2) → []
+minStack.push(0)   → []
+minStack.push(-3)  → []
+minStack.getMin()  → -3
+minStack.pop()     → []
+minStack.top()     → 0
+minStack.getMin()  → -2

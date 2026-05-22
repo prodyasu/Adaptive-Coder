@@ -1,0 +1,13 @@
+Given a binary tree and a target sum, return true if the tree has a root-to-leaf path
+where the sum of node values equals targetSum.
+A leaf is a node with no children.
+
+Example:
+Input: tree=[5,4,8,11,null,13,4,7,2,null,null,null,1], targetSum=22
+Output: true
+Explanation: 5→4→11→2 sums to 22
+
+Constraints:
+- Number of nodes in tree: 0 to 10000
+- -1000 <= Node.val <= 1000
+- targetSum range: -10^6 to 10^6

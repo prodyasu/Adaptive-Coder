@@ -1,0 +1,12 @@
+Given a sorted rotated array of unique integers, find the minimum element.
+The array was originally sorted in ascending order, then rotated 1 to n times.
+
+Examples:
+- [3,4,5,1,2] → 1
+- [4,5,6,7,0,1,2] → 0
+- [11,13,15,17] → 11
+
+Constraints:
+- n == nums.length, 1 <= n <= 5000
+- All integers are unique
+- Original array was sorted in ascending order

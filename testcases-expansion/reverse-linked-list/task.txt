@@ -1,0 +1,15 @@
+You have a singly linked list. Implement a function to reverse it in place and return the new head.
+
+Definition:
+class ListNode { val: number; next: ListNode | null }
+
+Function signature: reverseList(head: ListNode | null): ListNode | null
+
+Examples:
+- Input: 1→2→3→4→5 → Output: 5→4→3→2→1
+- Input: 1→2 → Output: 2→1
+- Input: [] → Output: []
+
+Constraints:
+- The number of nodes in the list is in the range [0, 5000]
+- -5000 <= Node.val <= 5000

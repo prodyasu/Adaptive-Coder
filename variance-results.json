@@ -1,0 +1,48 @@
+{
+  "problem": "coin-change-ii",
+  "baseline": "gen18_evolved",
+  "model": "kimi-k2.5:cloud",
+  "k": 5,
+  "results": [
+    {
+      "run": 1,
+      "passAt1": false,
+      "finalPass": false,
+      "attempts": 3,
+      "modelMs": 89855,
+      "ar": 0
+    },
+    {
+      "run": 2,
+      "passAt1": false,
+      "finalPass": false,
+      "attempts": 3,
+      "modelMs": 27777,
+      "ar": 0
+    },
+    {
+      "run": 3,
+      "passAt1": false,
+      "finalPass": false,
+      "attempts": 3,
+      "modelMs": 29799,
+      "ar": 1
+    },
+    {
+      "run": 4,
+      "passAt1": false,
+      "finalPass": false,
+      "attempts": 3,
+      "modelMs": 87586,
+      "ar": 0
+    },
+    {
+      "run": 5,
+      "passAt1": false,
+      "finalPass": false,
+      "attempts": 3,
+      "modelMs": 96054,
+      "ar": 2
+    }
+  ]
+}

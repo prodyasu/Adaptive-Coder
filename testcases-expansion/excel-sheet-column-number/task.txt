@@ -1,0 +1,14 @@
+Given a column title as in an Excel spreadsheet, return its corresponding column number.
+
+Examples:
+- "A" → 1
+- "Z" → 26
+- "AA" → 27
+- "AB" → 28
+- "ZY" → 701
+- "FXSHRXW" → 2147483647
+
+Constraints:
+- 1 <= columnTitle.length <= 7
+- columnTitle consists only of uppercase English letters
+- columnTitle is in the range ["A", "FXSHRXW"]

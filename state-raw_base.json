@@ -1,0 +1,75 @@
+{
+  "runId": "587a740c-9bb8-48fe-8b83-1829230c5076-raw_base",
+  "baselineKind": "raw_base",
+  "model": "kimi-k2.5:cloud",
+  "problems": {
+    "binary-search": {
+      "status": "done",
+      "attempts": [
+        {
+          "attempt": 0,
+          "pass": true,
+          "error": "success",
+          "waitMs": 0,
+          "modelMs": 4117,
+          "tokens": {
+            "input_tokens": 142,
+            "output_tokens": 555
+          }
+        }
+      ],
+      "finalPass": true,
+      "passAt1": true
+    },
+    "climbing-stairs": {
+      "status": "done",
+      "attempts": [
+        {
+          "attempt": 0,
+          "pass": true,
+          "error": "success",
+          "waitMs": 0,
+          "modelMs": 4361,
+          "tokens": {
+            "input_tokens": 144,
+            "output_tokens": 800
+          }
+        }
+      ],
+      "finalPass": true,
+      "passAt1": true
+    },
+    "container-with-most-water": {
+      "status": "done",
+      "attempts": [
+        {
+          "attempt": 0,
+          "pass": false,
+          "error": "wrong_answer",
+          "errorDetail": "assertion failed",
+          "waitMs": 0,
+          "modelMs": 4695
+        }
+      ],
+      "finalPass": false,
+      "passAt1": false
+    },
+    "coin-change-ii": {
+      "status": "done",
+      "attempts": [
+        {
+          "attempt": 0,
+          "pass": false,
+          "error": "wrong_answer",
+          "errorDetail": "assertion failed",
+          "waitMs": 0,
+          "modelMs": 3486
+        }
+      ],
+      "finalPass": false,
+      "passAt1": false
+    }
+  },
+  "started": "2026-04-24T18:28:07.652Z",
+  "updated": "2026-04-24T18:28:25.788Z"
+}

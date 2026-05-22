@@ -1,0 +1,7 @@
+{
+  "date": "2026-04-24",
+  "method": "raw_base MiniMax via /api/generate, 3 attempts per problem",
+  "easy": ["valid-palindrome", "reverse-linked-list", "ransom-note", "number-of-islands", "longest-substring-without-repeating", "maximum-subarray", "merge-two-sorted-lists", "path-sum", "find-minimum-in-rotated-array", "excel-sheet-column-number"],
+  "hard": ["invert-binary-tree", "min-stack"],
+  "note": "10/12 problems are easy for base model (pass@1). Only 2 hard. This is the opposite of the intended 30-50% band - base model is too capable on this problem set."
+}
