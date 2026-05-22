@@ -35,15 +35,23 @@ import { loadReference, getPrimarySignature } from "./ref-sig.js";
 import { translateSignature, formatPythonSignature } from "./ts-to-py.js";
 import { validateSpec } from "./spec-validator.js";
 import { writeTraceLog } from "./trace-log.js";
-import { classifyFailureKind } from "./failure-metrics.js";
+import { classifyFailureDetail } from "./failure-metrics.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const DEFAULT_TRACE_DIR = join(__dirname, "run-logs");
 
-function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, stageFailed, errorDetail, error, failureKind, trace }) {
+function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, stageFailed, errorDetail, error, failureKind, failureSubKind, failureCode, trace }) {
   if (opts.traceDir === false) return undefined;
-  const kind = failureKind || classifyFailureKind({ pass, stageFailed, errorDetail, error });
+  const detail = classifyFailureDetail({
+    pass,
+    stageFailed,
+    errorDetail,
+    error,
+    failureKind,
+    failureSubKind,
+    failureCode,
+  });
   try {
     return writeTraceLog({
       dir: opts.traceDir || DEFAULT_TRACE_DIR,
@@ -53,7 +61,9 @@ function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, st
       pass,
       stageFailed,
       errorDetail,
-      failureKind: kind,
+      failureKind: detail.kind,
+      failureSubKind: detail.subKind,
+      failureCode: detail.code,
       trace,
       maxChars: opts.traceMaxChars || 4000,
     });
@@ -231,11 +241,12 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         autorepairCycles: 0,
       });
 
-      const failureKind = classifyFailureKind({
+      const failureDetail = classifyFailureDetail({
         pass: result.pass,
         stageFailed: result.stageFailed,
         errorDetail: result.errorDetail,
       });
+      const failureKind = failureDetail.kind;
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -245,6 +256,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         stageFailed: result.stageFailed,
         errorDetail: result.errorDetail,
         failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
         trace: result.trace,
       });
 
@@ -258,6 +271,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         autorepairCycles: result.autorepairCycles,
         stageFailed: result.stageFailed,
         failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
         traceLog,
       });
 
@@ -275,7 +290,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         // Continue to next attempt
         const stageFailed = err instanceof OllamaTimeoutError ? "timeout" : "rate_limit";
         const error = err instanceof OllamaTimeoutError ? "timeout" : "rate_limit";
-        const failureKind = classifyFailureKind({ pass: false, stageFailed, error, errorDetail: `${TIMEOUT_MS}ms limit` });
+        const failureDetail = classifyFailureDetail({ pass: false, stageFailed, error, errorDetail: `${TIMEOUT_MS}ms limit` });
+        const failureKind = failureDetail.kind;
         const traceLog = recordAttemptTrace({
           opts,
           problemName,
@@ -286,6 +302,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
           error,
           errorDetail: `${TIMEOUT_MS}ms limit`,
           failureKind,
+          failureSubKind: failureDetail.subKind,
+          failureCode: failureDetail.code,
           trace: { errorName: err.name, errorMessage: err.message },
         });
         attempts.push({
@@ -295,18 +313,21 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
           waitMs, modelMs, autorepairCycles: 0,
           stageFailed,
           failureKind,
+          failureSubKind: failureDetail.subKind,
+          failureCode: failureDetail.code,
           traceLog,
         });
         continue;
       }
 
       // Model/network errors
-      const failureKind = classifyFailureKind({
+      const failureDetail = classifyFailureDetail({
         pass: false,
         stageFailed: "model_error",
         error: "model_error",
         errorDetail: err.message?.slice(0, 100) || "unknown",
       });
+      const failureKind = failureDetail.kind;
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -317,6 +338,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         error: "model_error",
         errorDetail: err.message?.slice(0, 100) || "unknown",
         failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
         trace: { errorName: err.name, errorMessage: err.message },
       });
       attempts.push({
@@ -326,6 +349,8 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         waitMs, modelMs, autorepairCycles: 0,
         stageFailed: "model_error",
         failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
         traceLog,
       });
       if (attempt === MAX_ATTEMPTS - 1) break;

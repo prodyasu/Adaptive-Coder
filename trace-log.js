@@ -43,6 +43,8 @@ export function writeTraceLog({
   stageFailed,
   errorDetail,
   failureKind,
+  failureSubKind,
+  failureCode,
   trace = {},
   maxChars = 4000,
 }) {
@@ -57,6 +59,8 @@ export function writeTraceLog({
     stageFailed,
     errorDetail,
     failureKind,
+    failureSubKind,
+    failureCode,
     trace: compactTrace(trace, maxChars),
   };
   appendFileSync(path, JSON.stringify(row) + '\n');

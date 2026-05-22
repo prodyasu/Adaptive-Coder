@@ -49,6 +49,7 @@ export type ProblemStatus = "pending" | "running" | "done";
 export type AttemptError = "timeout" | "rate_limit" | "compile_error" | "wrong_answer" | "model_error" | "success";
 export type StageError = "shaper_error" | "coder_error" | "verifier_error" | "autorepair_exhausted" | "spec_validation" | "timeout" | "rate_limit" | "model_error";
 export type AttemptFailureKind = "pass" | "logic_assertion" | "format_protocol" | "timeout" | "spec_validation" | "model_error";
+export type AttemptFailureCode = `${AttemptFailureKind}.${string}` | "pass";
 
 export interface AttemptResult {
   attempt: number;
@@ -60,6 +61,8 @@ export interface AttemptResult {
   autorepairCycles: number;
   stageFailed?: StageError;
   failureKind?: AttemptFailureKind;
+  failureSubKind?: string;
+  failureCode?: AttemptFailureCode;
 }
 
 export interface ProblemResult {
