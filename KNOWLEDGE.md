@@ -112,8 +112,9 @@ Append-only: `updateDeltaStatus()` never mutates existing lines, appends new ful
 | Run | Date | Baseline | K | Results | Notes |
 |-----|------|----------|---|---------|-------|
 | N4 smoke | 2026-05-22 | reasoning_os_v0 | 1 | pass@1=3/4, pass@N=4/4 | container timeout on attempt 0 |
-| k=5 validation | 2026-05-22 | reasoning_os_v0 | 5 | pass@1=16/20 (80%), pass@N=19/20 (95%) | container timeout did not reproduce; climbing-stairs name mismatch dominant |
+| k=5 validation | 2026-05-22 | reasoning_os_v0 | 5 | pass@1=16/20 (80%), pass@N=19/20 (95%) | climbing-stairs name mismatch dominant |
 | Delta 2 guard | 2026-05-22 | reasoning_os_v0 | 1 | pass@1=3/4, pass@N=4/4 | No regression, climbing-stairs now pass@1=true |
+| k=5 A/B control | 2026-05-22 | gen18_evolved | 5 | pass@1=17/20 (85%), pass@N=19/20 (95%) | No sig-repair; Wilson CIs overlap. Delta 2 net zero. |
 
 Run artifacts live in `validation-runs/` and `/tmp/reasoning-os-rcr-*/`.
 
@@ -160,10 +161,12 @@ cohAtrRisk        → coh_atr_audit_gate
 
 ## Next Steps
 
-- **k-replicate held-out comparison** needed to advance Deltas 1 and 2 from `validated_scoped` to `accepted`
-- **coin-change-ii** had a `format_protocol.missing_code` on one k=5 rep (coder produced no code); monitor rate during next validation
-- **Expand problem set** beyond N4 for stronger statistical signal
-- **Frozen baseline comparison**: run gen18_evolved baseline on same k=5 design to get a direct A/B comparison
+- **A/B comparison complete**: gen18_evolved (85% pass@1) vs reasoning_os_v0 (80% pass@1) — overlapping Wilson CIs, no significant difference.
+  - Delta 2 (sig-repair) helps coin-change-ii but hurts climbing-stairs; net zero within noise.
+  - Deltas 1+2 remain at `validated_scoped`; Delta 2 guard logic needs iteration before re-validation.
+- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly.
+- **Expand problem set** beyond N4 for stronger statistical signal.
+- **Coin-change-ii** had a `format_protocol.missing_code` failure in gen18 baseline; monitor rate.
 
 ## Related ERAS threads
 
