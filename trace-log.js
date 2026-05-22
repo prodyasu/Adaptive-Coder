@@ -28,6 +28,18 @@ function compactTrace(trace = {}, maxChars) {
   return out;
 }
 
+/**
+ * Compact reasoningOs.trace sub-field only (raw model output), preserving
+ * all other reasoningOs fields intact.
+ */
+function compactReasoningOsTrace(reasoningOs = {}, maxChars) {
+  if (!reasoningOs.trace) return reasoningOs;
+  return {
+    ...reasoningOs,
+    trace: compactTrace(reasoningOs.trace, maxChars),
+  };
+}
+
 export function traceLogPath({ dir = 'run-logs', problemName, baselineKind }) {
   const problem = sanitizeName(problemName);
   const baseline = sanitizeName(baselineKind);
@@ -46,6 +58,7 @@ export function writeTraceLog({
   failureSubKind,
   failureCode,
   trace = {},
+  reasoningOs,
   maxChars = 4000,
 }) {
   mkdirSync(dir, { recursive: true });
@@ -62,6 +75,7 @@ export function writeTraceLog({
     failureSubKind,
     failureCode,
     trace: compactTrace(trace, maxChars),
+    reasoningOs: reasoningOs ? compactReasoningOsTrace(reasoningOs, maxChars) : undefined,
   };
   appendFileSync(path, JSON.stringify(row) + '\n');
   return path;

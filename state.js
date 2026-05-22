@@ -44,7 +44,7 @@ export const MAX_AUTOREPAIR_CYCLES = 2; // per attempt
 export const STATE_FILE = "./eval-harness-state.jsonl";
 export const PROBLEMS_DIR = "../shaper-autorepair/testcases";
 
-export type BaselineKind = "raw_base" | "gen0_seed" | "gen18_evolved";
+export type BaselineKind = "raw_base" | "gen0_seed" | "gen18_evolved" | "reasoning_os_v0";
 export type ProblemStatus = "pending" | "running" | "done";
 export type AttemptError = "timeout" | "rate_limit" | "compile_error" | "wrong_answer" | "model_error" | "success";
 export type StageError = "shaper_error" | "coder_error" | "verifier_error" | "autorepair_exhausted" | "spec_validation" | "timeout" | "rate_limit" | "model_error";

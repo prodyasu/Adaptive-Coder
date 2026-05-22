@@ -33,7 +33,8 @@ import { execSync, execFileSync } from "child_process";
 import { tmpdir } from "os";
 import { loadReference, getPrimarySignature } from "./ref-sig.js";
 import { translateSignature, formatPythonSignature } from "./ts-to-py.js";
-import { validateSpec } from "./spec-validator.js";
+import { validateSpec, loadExpectedSignature } from "./spec-validator.js";
+import { repairSignatureName } from "./sig-repair.js";
 import { writeTraceLog } from "./trace-log.js";
 import { classifyFailureDetail } from "./failure-metrics.js";
 
@@ -41,7 +42,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const DEFAULT_TRACE_DIR = join(__dirname, "run-logs");
 
-function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, stageFailed, errorDetail, error, failureKind, failureSubKind, failureCode, trace }) {
+function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, stageFailed, errorDetail, error, failureKind, failureSubKind, failureCode, trace, reasoningOs }) {
   if (opts.traceDir === false) return undefined;
   const detail = classifyFailureDetail({
     pass,
@@ -65,6 +66,7 @@ function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, st
       failureSubKind: detail.subKind,
       failureCode: detail.code,
       trace,
+      reasoningOs,
       maxChars: opts.traceMaxChars || 4000,
     });
   } catch (err) {
@@ -228,6 +230,15 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
   const taskPath = join(__dirname, "../shaper-autorepair/testcases", problemName, "task.txt");
   const task = readFileSync(taskPath, "utf8").trim();
 
+  // Route for reasoning_os_v0 baseline (used even before model calls)
+  const { routeTask, attachReasoningOsToAttempt } = await import("./reasoning-os.js");
+  const route = baselineKind === "reasoning_os_v0"
+    ? routeTask({ problemName, baselineKind })
+    : null;
+
+  // Internal execution uses gen18 pipeline for reasoning_os_v0
+  const effectiveBaselineKind = baselineKind === "reasoning_os_v0" ? "gen18_evolved" : baselineKind;
+
   const attempts = [];
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -236,9 +247,10 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
     let stageFailed;
 
     try {
-      const result = await runPipeline(problemName, task, baselineKind, model, signal, {
+      const result = await runPipeline(problemName, task, effectiveBaselineKind, model, signal, {
         waitMs: 0,
         autorepairCycles: 0,
+        originalBaselineKind: baselineKind,
       });
 
       const failureDetail = classifyFailureDetail({
@@ -247,6 +259,22 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         errorDetail: result.errorDetail,
       });
       const failureKind = failureDetail.kind;
+      let attemptRecord = {
+        attempt,
+        pass: result.pass,
+        error: result.pass ? "success" : undefined,
+        errorDetail: result.errorDetail,
+        waitMs: result.waitMs,
+        modelMs: result.modelMs,
+        autorepairCycles: result.autorepairCycles,
+        stageFailed: result.stageFailed,
+        failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
+      };
+      if (route) {
+        attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
+      }
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -259,22 +287,10 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         failureSubKind: failureDetail.subKind,
         failureCode: failureDetail.code,
         trace: result.trace,
+        reasoningOs: attemptRecord.reasoningOs,
       });
-
-      attempts.push({
-        attempt,
-        pass: result.pass,
-        error: result.pass ? "success" : undefined,
-        errorDetail: result.errorDetail,
-        waitMs: result.waitMs,
-        modelMs: result.modelMs,
-        autorepairCycles: result.autorepairCycles,
-        stageFailed: result.stageFailed,
-        failureKind,
-        failureSubKind: failureDetail.subKind,
-        failureCode: failureDetail.code,
-        traceLog,
-      });
+      attemptRecord.traceLog = traceLog;
+      attempts.push(attemptRecord);
 
       if (result.pass) break;
 
@@ -292,6 +308,19 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         const error = err instanceof OllamaTimeoutError ? "timeout" : "rate_limit";
         const failureDetail = classifyFailureDetail({ pass: false, stageFailed, error, errorDetail: `${TIMEOUT_MS}ms limit` });
         const failureKind = failureDetail.kind;
+        let attemptRecord = {
+          attempt, pass: false,
+          error,
+          errorDetail: `${TIMEOUT_MS}ms limit`,
+          waitMs, modelMs, autorepairCycles: 0,
+          stageFailed,
+          failureKind,
+          failureSubKind: failureDetail.subKind,
+          failureCode: failureDetail.code,
+        };
+        if (route) {
+          attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
+        }
         const traceLog = recordAttemptTrace({
           opts,
           problemName,
@@ -305,18 +334,10 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
           failureSubKind: failureDetail.subKind,
           failureCode: failureDetail.code,
           trace: { errorName: err.name, errorMessage: err.message },
+          reasoningOs: attemptRecord.reasoningOs,
         });
-        attempts.push({
-          attempt, pass: false,
-          error,
-          errorDetail: `${TIMEOUT_MS}ms limit`,
-          waitMs, modelMs, autorepairCycles: 0,
-          stageFailed,
-          failureKind,
-          failureSubKind: failureDetail.subKind,
-          failureCode: failureDetail.code,
-          traceLog,
-        });
+        attemptRecord.traceLog = traceLog;
+        attempts.push(attemptRecord);
         continue;
       }
 
@@ -328,6 +349,19 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         errorDetail: err.message?.slice(0, 100) || "unknown",
       });
       const failureKind = failureDetail.kind;
+      let attemptRecord = {
+        attempt, pass: false,
+        error: "model_error",
+        errorDetail: err.message?.slice(0, 100) || "unknown",
+        waitMs, modelMs, autorepairCycles: 0,
+        stageFailed: "model_error",
+        failureKind,
+        failureSubKind: failureDetail.subKind,
+        failureCode: failureDetail.code,
+      };
+      if (route) {
+        attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
+      }
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -341,18 +375,10 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         failureSubKind: failureDetail.subKind,
         failureCode: failureDetail.code,
         trace: { errorName: err.name, errorMessage: err.message },
+        reasoningOs: attemptRecord.reasoningOs,
       });
-      attempts.push({
-        attempt, pass: false,
-        error: "model_error",
-        errorDetail: err.message?.slice(0, 100) || "unknown",
-        waitMs, modelMs, autorepairCycles: 0,
-        stageFailed: "model_error",
-        failureKind,
-        failureSubKind: failureDetail.subKind,
-        failureCode: failureDetail.code,
-        traceLog,
-      });
+      attemptRecord.traceLog = traceLog;
+      attempts.push(attemptRecord);
       if (attempt === MAX_ATTEMPTS - 1) break;
     }
   }
@@ -466,6 +492,20 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
 
     code = extractFromResponse(coderResponse);
     code = ensureTypingImports(code); // Add typing imports if missing
+
+    // Signature repair for reasoning_os_v0 baseline
+    const effectiveOriginalBaseline = ctx.originalBaselineKind || baselineKind;
+    if (effectiveOriginalBaseline === 'reasoning_os_v0') {
+      const expectedSig = loadExpectedSignature(problemName);
+      if (expectedSig && expectedSig.name) {
+        const { repaired, repairedName, originalName } = repairSignatureName(code, expectedSig.name);
+        if (repairedName) {
+          trace.sigRepair = { originalName, repairedName };
+          code = repaired;
+        }
+      }
+    }
+
     trace.code = code;
 
     if (!code || code.length < 15) {

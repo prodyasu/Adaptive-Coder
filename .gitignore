@@ -19,3 +19,21 @@ coverage/
 # Python cache from ad-hoc helpers
 __pycache__/
 *.pyc
+
+# State / run data — too large and session-specific for git
+state.jsonl
+state_backup.jsonl
+state_genshard.jsonl
+
+# Run logs and validation runs — regenerated data, not source
+run-logs/
+validation-runs/
+
+# Delta logs — session-specific audit trail, not source
+delta-logs/
+
+# Reasoning OS architecture diagram — generated, not source
+reasoning-os-v0-architecture.html
+
+# Temp / tmp traces
+/tmp/

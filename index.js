@@ -179,15 +179,50 @@ function compareResults(states) {
   console.log("  gen18_evolved = full pipeline with autorepair (as trained).");
 }
 
+const ALL_BASELINES = ['raw_base', 'gen0_seed', 'gen18_evolved', 'reasoning_os_v0'];
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 
-if (args.includes("--status")) {
-  const kinds = ["raw_base", "gen0_seed", "gen18_evolved"];
-  for (const kind of kinds) {
+// --os-route: dry-run that prints route JSON without any model calls
+const osRouteIdx = args.indexOf('--os-route');
+if (osRouteIdx >= 0) {
+  const problemName = args[osRouteIdx + 1];
+  if (!problemName) {
+    console.error('usage: node index.js --os-route <problem-name>');
+    process.exit(1);
+  }
+  const { routeTask } = await import('./reasoning-os.js');
+  console.log(JSON.stringify(routeTask({ problemName, baselineKind: 'reasoning_os_v0' }), null, 2));
+  process.exit(0);
+}
+
+// --problems: comma- or space-separated list of problem names.
+// Consumes args after --problems until the next flag, so both forms work:
+//   --problems binary-search,climbing-stairs
+//   --problems binary-search climbing-stairs
+const problemsIdx = args.indexOf('--problems');
+let problemFilter = null;
+if (problemsIdx >= 0) {
+  const values = [];
+  for (let i = problemsIdx + 1; i < args.length; i++) {
+    if (args[i].startsWith('--')) break;
+    values.push(args[i]);
+  }
+  const raw = values.join(' ');
+  problemFilter = raw.split(/[,\s]+/).filter(Boolean);
+  if (problemFilter.length === 0) {
+    console.error('usage: node index.js --run <baseline> --problems <name[,name]...>');
+    process.exit(1);
+  }
+  console.log(`[CLI] --problems filter: ${problemFilter.join(', ')}`);
+}
+
+if (args.includes('--status')) {
+  for (const kind of ALL_BASELINES) {
     const state = loadState(kind);
     if (state) {
       const done = Object.values(state.problems).filter(p => p.status === "done").length;
@@ -201,8 +236,8 @@ if (args.includes("--status")) {
   process.exit(0);
 }
 
-if (args.includes("--compare")) {
-  const kinds = ["raw_base", "gen0_seed", "gen18_evolved"];
+if (args.includes('--compare')) {
+  const kinds = ALL_BASELINES;
   const states = {};
   for (const kind of kinds) {
     const s = loadState(kind);
@@ -219,7 +254,7 @@ if (runArgIdx >= 0) {
 
   (async () => {
     try {
-      await runBaseline(baselineKind, model, PROBLEMS_DEFAULT, null);
+      await runBaseline(baselineKind, model, problemFilter || PROBLEMS_DEFAULT, null);
       process.exit(0);
     } catch(e) {
       console.error("Fatal:", e.message);
@@ -234,6 +269,9 @@ if (runArgIdx >= 0) {
   console.log("  node index.js --run raw_base      # coder-only (already have 2/4)");
   console.log("  node index.js --run gen0_seed     # shaper+coder, no autorepair");
   console.log("  node index.js --run gen18_evolved # full pipeline, autorepair ON");
+  console.log("  node index.js --run reasoning_os_v0 --problems binary-search  # single problem");
+  console.log("  node index.js --run reasoning_os_v0 --problems binary-search,climbing-stairs  # comma-sep list");
+  console.log("  node index.js --run reasoning_os_v0 --problems binary-search climbing-stairs   # space-sep list");
   console.log("  node index.js --compare          # compare all baselines");
   console.log("  node index.js --status          # show run status");
   console.log("  node index.js --resume          # resume interrupted run");

@@ -5,17 +5,43 @@
  * Returns the complete Python module from first top-level definition to end.
  * If response has a class with no functions, returns the full class definition.
  * If response has functions, returns from first def to end of module.
+ *
+ * RCR delta (binary-search failure): prefers the FIRST fenced python/code block
+ * when multiple blocks are present (avoids concatenating test code), and preserves
+ * leading import/from lines that precede the first top-level def/class so that
+ * type annotations keep their imports.
  */
 
 export function extractCode(rawText) {
   if (!rawText || rawText.length < 10) return "";
 
+  // Detect multiple fenced python/code blocks BEFORE stripping fences.
+  // If there is more than one ```python ... ``` or ``` ... ``` block,
+  // we take only the first block to avoid including test code that the model
+  // appended after the solution.
+  const blockStarts = [];
+  const fenceRegex = /```(\w*)\n?/g;
+  let match;
+  while ((match = fenceRegex.exec(rawText)) !== null) {
+    blockStarts.push(match.index);
+  }
+
   // Strip markdown code fences
   let text = rawText.replace(/^```python\n?|```\n?$/gm, "").trim();
 
+  // If multiple blocks were present, re-extract just the first one.
+  // blockStarts.length >= 2 means at least two fence openers were found.
+  if (blockStarts.length >= 2) {
+    // Find the first ```python or ``` line and capture until the matching close
+    const firstBlockMatch = rawText.match(/^```(?:python)?\n([\s\S]*?)^```/m);
+    if (firstBlockMatch) {
+      text = firstBlockMatch[1].replace(/^```python\n?|```\n?$/gm, "").trim();
+    }
+  }
+
   // Find the first top-level definition: either class or def
   const lines = text.split("\n");
-  
+
   // Find index of first top-level class or def (no leading whitespace)
   let firstDefIdx = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -25,13 +51,32 @@ export function extractCode(rawText) {
       break;
     }
   }
-  
+
   if (firstDefIdx < 0) return "";
 
   // Collect all lines from first definition to end
-  // Remove any leading explanation text before the first definition
-  const moduleLines = lines.slice(firstDefIdx);
-  
+  // BUT: also collect any leading import/from lines that appear BEFORE
+  // the first top-level def/class, so type annotations keep their imports.
+  // We look backwards from firstDefIdx to capture import statements.
+  // We skip: blank lines, docstrings, comments, and decorator lines (@foo)
+  // since they do not signal a real code boundary.
+  let startIdx = firstDefIdx;
+  for (let i = firstDefIdx - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed === "") continue;
+    if (trimmed.startsWith('"""') || trimmed.startsWith("'''")) continue;
+    if (trimmed.startsWith("#")) continue;
+    if (trimmed.startsWith("@")) continue; // decorator — skip over it
+    if (trimmed.startsWith("import ") || trimmed.startsWith("from ")) {
+      startIdx = i;
+    } else {
+      // Non-import, non-blank, non-comment, non-decorator — stop here
+      break;
+    }
+  }
+
+  const moduleLines = lines.slice(startIdx);
+
   return moduleLines.join("\n");
 }
 
