@@ -210,11 +210,32 @@ cohAtrRisk        → coh_atr_audit_gate
 - Overall CIs overlap (not significant for aggregate improvement)
 - climbing-stairs CIs do NOT overlap: OS v0 [23.1%, 88.2%], gen18 [0.0%, 43.4%]
 
-## Next Steps
+## Progress Toward "Reasoning OS" Goal
 
-- ✅ **Delta 2 PROMOTED to validated_scoped** — climbing-stairs effect is discriminable and mechanistically explained
-- **Expand problem set** to N≥8 for tighter CIs on overall effect (full accepted promotion)
-- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly
+**Honest assessment: ~10-15% of the vision.**
+
+The vision was a constraint-selection OS that decides what to attend to, in what order, with what priority — recursive, self-improving, measurable. What we have:
+
+| Layer | Envisioned | Built | Status |
+|---|---|---|---|
+| Eval harness | Frozen baselines, A/B comparison, CI discipline | ✅ Fully built | Works well |
+| Shaper→Coder→Verifier pipeline | Role-separated architecture | ✅ Built | All minimax-m2.7 |
+| Delta 1: Extraction decontamination | Better code extraction | ✅ validated_scoped | Narrow fix |
+| Delta 2: Name repair | Fix signature mismatches | ✅ validated_scoped | +60pp on 1 problem |
+| Delta 3+: Constraint ordering | Which constraints matter most | ❌ Not started | — |
+| Delta 4+: Multi-step reasoning | Decomposition, verification loops | ❌ Not started | — |
+| Meta-reasoning / RCR | System improving its own constraints | ❌ Not started | — |
+| Problem expansion | N≥8 for statistical power | ❌ Not started | — |
+
+**What's solid**: The eval methodology — frozen baselines, A/B comparison, Wilson CIs, discriminative failure signals, delta promotion with guard discipline. This is genuinely useful infrastructure.
+
+**What's oversold**: Calling it a "Reasoning OS" implies general constraint-selection architecture. We have one hardcoded repair hook that fixes function names. That's error correction, not reasoning.
+
+**What's next (priority order)**:
+1. Expand problem set to N≥8 for tighter CIs → full `accepted` for Delta 2
+2. Test deltas that actually improve reasoning (spec quality, constraint ordering, decomposition)
+3. Improve sig-repair (multi-def, param count, internal refs)
+4. Build actual meta-reasoning (the system measuring and improving its own constraints)
 
 ## Related ERAS threads
 
