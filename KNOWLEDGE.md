@@ -159,14 +159,22 @@ repairability     → repair_loop_policy
 cohAtrRisk        → coh_atr_audit_gate
 ```
 
+## Sig-Repair Bug Fix (2026-05-23)
+
+**Root cause**: The k=5 validation traces showed `sigRepair: null` on all entries, making it appear sig-repair never fired. Investigation revealed the validation run was executed from a Node.js process that had **cached the old eval.js module** (pre-sig-repair version). The committed code at `86e57d2` DID include sig-repair, but the running process used the stale cache.
+
+**Proof**: Fresh `node` process test confirmed `repairSignatureName('climbStairs...', 'climb')` correctly returns `def climb(...)` with `repairedName:"climb"`. The trace field `trace.sigRepair` IS populated in fresh runs.
+
+**Fix**: Always start a fresh Node.js process for validation runs. Never reuse long-running processes for A/B comparison.
+
+**MAX_ATTEMPTS**: Was 3, now increased to 5 (`c2f302f`) to match original k=5 validation protocol. The original k=5 run used `evalProblem` in a loop with `MAX_ATTEMPTS=5`, but the function breaks on first pass — so pass@1 = first-attempt pass/fail per trial, and k=5 means 5 independent trials.
+
 ## Next Steps
 
-- **A/B comparison complete**: gen18_evolved (85% pass@1) vs reasoning_os_v0 (80% pass@1) — overlapping Wilson CIs, no significant difference.
-  - Delta 2 (sig-repair) helps coin-change-ii but hurts climbing-stairs; net zero within noise.
-  - Deltas 1+2 remain at `validated_scoped`; Delta 2 guard logic needs iteration before re-validation.
-- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly.
+- **Proper k=5 A/B rerun in progress** (5 independent trials × 4 problems × 2 baselines = 40 data points). Running with fresh process, `MAX_ATTEMPTS=5`, both OS v0 and gen18.
+- **Delta 2 status**: Will re-evaluate after proper k=5 results. If climbing-stairs pass@1 improves measurably (from 2/5 baseline), promote to `accepted`.
 - **Expand problem set** beyond N4 for stronger statistical signal.
-- **Coin-change-ii** had a `format_protocol.missing_code` failure in gen18 baseline; monitor rate.
+- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly.
 
 ## Related ERAS threads
 
