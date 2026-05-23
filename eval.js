@@ -76,7 +76,7 @@ function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, st
 }
 
 const TIMEOUT_MS = 15_000;  // 15s — enough for valid calls with reduced maxTokens
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
 const MAX_AUTOREPAIR_CYCLES = 2;
 const TIMEOUT_BACKOFF_MS = [5_000, 10_000, 20_000];
 const RATE_LIMIT_DELAY_MS = 10_000; // 10s — much shorter, Ollama rate limits clear quickly
