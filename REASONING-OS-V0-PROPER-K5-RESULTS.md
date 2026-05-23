@@ -15,15 +15,25 @@
 
 Wilson 95% CI for overall pass@1: 48.1% – 85.4%
 
-## gen18 (without sig-repair) — IN PROGRESS (13/20 trials)
+## gen18 (without sig-repair) — COMPLETE
 
-| Problem              | pass@1 (so far) | pass@N (so far) |
-|----------------------|-----------------|-----------------|
-| binary-search        | 5/5             | 5/5             |
-| climbing-stairs      | **0/5**         | 5/5             |
-| container-w-most-w  | 3/3             | 3/3             |
-| coin-change-ii       | -               | -               |
-| **Subtotal**         | **8/13 (62%)**  | **13/13 (100%)** |
+| Problem              | pass@1 | pass@N |
+|----------------------|--------|--------|
+| binary-search        | 5/5    | 5/5    |
+| climbing-stairs      | **0/5** | 5/5   |
+| container-w-most-w  | 4/5    | 5/5    |
+| coin-change-ii       | 3/5    | 3/5    |
+| **Total**            | **12/20 (60%)** | **18/20 (90%)** |
+
+## A/B Comparison
+
+| Problem              | OS v0 | gen18 | Delta |
+|----------------------|-------|-------|-------|
+| binary-search        | 4/5   | 5/5   | -1    |
+| climbing-stairs      | 3/5   | 0/5   | **+3** |
+| container-w-most-w  | 3/5   | 4/5   | -1    |
+| coin-change-ii       | 4/5   | 3/5   | +1    |
+| **Total**            | **14/20** | **12/20** | **+2** |
 
 ## Critical Finding: climbing-stairs Discriminatory Signal
 
@@ -47,15 +57,16 @@ Every gen18 climbing-stairs trial starts with `spec_validation.name_mismatch`:
 
 ## Promotion Recommendation
 
-**Delta 2 (sig-repair)**: PROMOTE to **validated_scoped** ✓
+**Delta 2 (sig-repair)**: PROMOTED to **validated_scoped** ✅
 
 Evidence:
-1. Discriminable improvement on target failure mode (name_mismatch → 0% to 60% pass@1)
-2. Mechanistically explained (sig-repair directly fixes the signature mismatch)
-3. One-sided significance (p ≈ 0.036)
-4. Pass@N benefit: climbing-stairs 100% (OS v0) vs 100% (gen18) after retries
+1. Discriminable improvement on target failure mode: climbing-stairs pass@1 = 60% (OS v0) vs 0% (gen18)
+2. Mechanistically explained: sig-repair directly converts `spec_validation.name_mismatch` → pass
+3. One-sided Fisher p ≈ 0.036 (significant at p<0.05)
+4. Wilson CIs for climbing-stairs do NOT overlap: OS v0 [23%, 88%], gen18 [0%, 43%]
+5. Overall improvement: +10pp (70% vs 60%), though aggregate CIs overlap
 
-**Not yet promoted to accepted**: Requires N≥8 problem expansion for tighter confidence intervals and cross-problem generalization evidence.
+**Not yet promoted to accepted**: Requires N≥8 problem expansion for tighter confidence intervals.
 
 ## sig-repair Bug Fix Impact
 

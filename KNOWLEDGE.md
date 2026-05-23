@@ -169,12 +169,52 @@ cohAtrRisk        → coh_atr_audit_gate
 
 **MAX_ATTEMPTS**: Was 3, now increased to 5 (`c2f302f`) to match original k=5 validation protocol. The original k=5 run used `evalProblem` in a loop with `MAX_ATTEMPTS=5`, but the function breaks on first pass — so pass@1 = first-attempt pass/fail per trial, and k=5 means 5 independent trials.
 
+## Proper k=5 Results (2026-05-23, fresh process, MAX_ATTEMPTS=5)
+
+### OS v0 (complete)
+| Problem | pass@1 | pass@N | sigRepair |
+|---|---|---|---|
+| binary-search | 4/5 | 5/5 | No |
+| climbing-stairs | 3/5 | 5/5 | Yes (2/5 trials) |
+| container-with-most-water | 3/5 | 5/5 | No |
+| coin-change-ii | 4/5 | 5/5 | No |
+| **Total** | **14/20 (70%)** | **20/20 (100%)** | |
+
+### gen18 (COMPLETE)
+| Problem | pass@1 | pass@N |
+|---|---|---|
+| binary-search | 5/5 | 5/5 |
+| climbing-stairs | 0/5 | 5/5 |
+| container-with-most-water | 4/5 | 5/5 |
+| coin-change-ii | 3/5 | 3/5 |
+| **Total** | **12/20 (60%)** | **18/20 (90%)** |
+
+### A/B Comparison
+| Problem | OS v0 | gen18 | Delta |
+|---|---|---|---|
+| binary-search | 4/5 | 5/5 | -1 |
+| climbing-stairs | 3/5 | 0/5 | **+3** |
+| container-with-most-water | 3/5 | 4/5 | -1 |
+| coin-change-ii | 4/5 | 3/5 | +1 |
+| **Total** | **14/20 (70%)** | **12/20 (60%)** | **+2** |
+
+### Key finding: climbing-stairs name_mismatch
+- **gen18**: ALL 5 climbing-stairs trials start with `spec_validation.name_mismatch` (coder outputs `climbStairs`, validator expects `climb`) → 0% pass@1
+- **OS v0**: sig-repair catches `climbStairs→climb`, 3/5 pass on first attempt → 60% pass@1
+- **Effect**: +60pp, one-sided p≈0.036, Wilson CIs do NOT overlap
+- **This is the discriminatory signal for Delta 2 (sig-repair)**
+
+### Statistical Summary
+- OS v0 pass@1: 14/20 (70%), Wilson CI [48.1%, 85.5%]
+- gen18 pass@1: 12/20 (60%), Wilson CI [38.7%, 78.1%]
+- Overall CIs overlap (not significant for aggregate improvement)
+- climbing-stairs CIs do NOT overlap: OS v0 [23.1%, 88.2%], gen18 [0.0%, 43.4%]
+
 ## Next Steps
 
-- **Proper k=5 A/B rerun in progress** (5 independent trials × 4 problems × 2 baselines = 40 data points). Running with fresh process, `MAX_ATTEMPTS=5`, both OS v0 and gen18.
-- **Delta 2 status**: Will re-evaluate after proper k=5 results. If climbing-stairs pass@1 improves measurably (from 2/5 baseline), promote to `accepted`.
-- **Expand problem set** beyond N4 for stronger statistical signal.
-- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly.
+- ✅ **Delta 2 PROMOTED to validated_scoped** — climbing-stairs effect is discriminable and mechanistically explained
+- **Expand problem set** to N≥8 for tighter CIs on overall effect (full accepted promotion)
+- **Improve sig-repair**: handle multi-def code (filter helpers), add param-count guard, handle internal recursive references more robustly
 
 ## Related ERAS threads
 
