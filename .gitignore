@@ -37,3 +37,10 @@ reasoning-os-v0-architecture.html
 
 # Temp / tmp traces
 /tmp/
+# Model sensitivity child process scripts
+_model-sens-child.mjs
+partial-r4-analysis.mjs
+
+# Model sensitivity child process scripts
+_model-sens-child.mjs
+partial-r4-analysis.mjs

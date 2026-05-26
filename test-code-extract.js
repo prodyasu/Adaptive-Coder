@@ -244,4 +244,65 @@ assert(result11.includes("def search(nums: List[int]"), "should include full sea
 assert(result11.includes("return -1"), "should include the return -1 statement");
 console.log("✅ Test 11: real binary-search output (first block only, import preserved)");
 
+// Test 12: unfenced pytest scaffolding is stripped
+const withPytest = multiline(
+  "from typing import List",
+  "",
+  "def search(nums: List[int], target: int) -> int:",
+  "    left, right = 0, len(nums) - 1",
+  "    while left <= right:",
+  "        mid = left + (right - left) // 2",
+  "        if nums[mid] == target:",
+  "            return mid",
+  "        elif nums[mid] < target:",
+  "            left = mid + 1",
+  "        else:",
+  "            right = mid - 1",
+  "    return -1",
+  "",
+  "import pytest",
+  "",
+  "class TestBinarySearch:",
+  "    def test_basic(self):",
+  "        assert search([1,3,5,7], 5) == 2",
+  "",
+  "if __name__ == '__main__':",
+  "    pytest.main([__file__, '-v'])",
+);
+
+const result12 = extractCode(withPytest);
+assert(!result12.includes("pytest"), "Test 12: should not include pytest");
+assert(!result12.includes("class TestBinarySearch"), "Test 12: should not include test class");
+assert(!result12.includes("if __name__"), "Test 12: should not include __main__ guard");
+assert(result12.includes("def search"), "Test 12: should include the actual function");
+assert(result12.includes("return -1"), "Test 12: should include return -1");
+console.log("✅ Test 12: unfenced pytest scaffolding is stripped");
+
+// Test 13: bare code with from pytest import still stripped
+const withFromPytest = multiline(
+  "def search(nums, target):",
+  "    left, right = 0, len(nums) - 1",
+  "    while left <= right:",
+  "        mid = (left + right) // 2",
+  "        if nums[mid] == target:",
+  "            return mid",
+  "        elif nums[mid] < target:",
+  "            left = mid + 1",
+  "        else:",
+  "            right = mid - 1",
+  "    return -1",
+  "",
+  "from pytest import approx",
+  "",
+  "class TestSearch:",
+  "    def test_one(self):",
+  "        assert search([1,2,3], 2) == 1",
+);
+
+const result13 = extractCode(withFromPytest);
+assert(!result13.includes("from pytest"), "Test 13: should not include from pytest import");
+assert(!result13.includes("class TestSearch"), "Test 13: should not include test class");
+assert(result13.includes("def search"), "Test 13: should include the actual function");
+console.log("✅ Test 13: bare code with from pytest import stripped");
+
 console.log("\n🎉 All code-extract tests passed.");

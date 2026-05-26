@@ -26,7 +26,7 @@ import { summarizeStateFailureKinds, formatFailureKindSummary } from "./failure-
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = join(__dirname, "state.jsonl");
-const PROBLEMS_DEFAULT = ["binary-search", "climbing-stairs", "container-with-most-water", "coin-change-ii"];
+const PROBLEMS_DEFAULT = ["binary-search", "climbing-stairs", "container-with-most-water", "coin-change-ii", "two-sum", "valid-palindrome", "number-of-islands", "invert-binary-tree"];
 
 // ---------------------------------------------------------------------------
 // State management

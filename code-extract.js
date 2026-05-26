@@ -77,7 +77,38 @@ export function extractCode(rawText) {
 
   const moduleLines = lines.slice(startIdx);
 
-  return moduleLines.join("\n");
+  // Strip model-appended test scaffolding that appears after the main function.
+  // Patterns: standalone "import pytest", "class Test...", "if __name__ == '__main__':", etc.
+  // We keep everything up to (but not including) the first such line that appears
+  // AFTER the initial top-level def/class.
+  const cutPatterns = [
+    /^import pytest\b/,
+    /^from pytest\b/,
+    /^class Test[A-Z]/,       // TestXxx classes
+    /^class Test_/,           // test_xxx style
+    /^if __name__\s*==\s*['"]__main__['"]/,
+  ];
+
+  let cutLine = moduleLines.length; // default: keep all
+  // Find the first line that matches a cut pattern, but only after the main def body
+  // (i.e., after a dedent back to column 0 with a cut-matching line)
+  for (let i = 1; i < moduleLines.length; i++) {
+    const trimmed = moduleLines[i].trimStart();
+    const isAtCol0 = moduleLines[i] === trimmed || moduleLines[i].startsWith(moduleLines[i].trimStart());
+    // Only cut if it's at indentation level 0 (top-level test scaffolding)
+    if (isAtCol0 || trimmed === moduleLines[i]) {
+      for (const pat of cutPatterns) {
+        if (pat.test(trimmed)) {
+          cutLine = i;
+          break;
+        }
+      }
+      if (cutLine < moduleLines.length) break;
+    }
+  }
+
+  const finalLines = moduleLines.slice(0, cutLine);
+  return finalLines.join("\n");
 }
 
 /**

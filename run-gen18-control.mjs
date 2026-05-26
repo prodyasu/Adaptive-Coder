@@ -6,7 +6,7 @@ import { evalProblem } from './eval.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const PROBLEMS = ['binary-search', 'climbing-stairs', 'container-with-most-water', 'coin-change-ii'];
+const PROBLEMS = ['binary-search', 'climbing-stairs', 'container-with-most-water', 'coin-change-ii', 'two-sum', 'valid-palindrome', 'number-of-islands', 'invert-binary-tree'];
 const BASELINE = 'gen18_evolved';
 const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const RUN_DIR = join('validation-runs', `gen18-evolved-k5-rerun-${TIMESTAMP}`);

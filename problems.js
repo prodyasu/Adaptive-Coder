@@ -16,14 +16,28 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROBLEMS_DIR = join(__dirname, "../shaper-autorepair/testcases");
+const EXPANSION_DIR = join(__dirname, "testcases-expansion");
+
+/**
+ * Find the actual directory containing a problem.
+ * Problems may be in either the main testcases dir or the expansion dir.
+ */
+function findProblemDir(name) {
+  const mainPath = join(PROBLEMS_DIR, name);
+  const expansionPath = join(EXPANSION_DIR, name);
+  if (existsSync(join(mainPath, "task.txt"))) return mainPath;
+  if (existsSync(join(expansionPath, "task.txt"))) return expansionPath;
+  return null;
+}
 
 export function loadProblem(name) {
-  const taskPath = join(PROBLEMS_DIR, name, "task.txt");
-  const refPath = join(PROBLEMS_DIR, name, "reference.ts");
-
-  if (!existsSync(taskPath)) {
-    throw new Error(`Problem ${name} not found at ${taskPath}`);
+  const dir = findProblemDir(name);
+  if (!dir) {
+    throw new Error(`Problem ${name} not found in ${PROBLEMS_DIR} or ${EXPANSION_DIR}`);
   }
+
+  const taskPath = join(dir, "task.txt");
+  const refPath = join(dir, "reference.ts");
 
   const task = readFileSync(taskPath, "utf8").trim();
   const hasReference = existsSync(refPath);
@@ -65,17 +79,33 @@ export function listProblems(dir = PROBLEMS_DIR) {
 
 /**
  * Load held-out problems specifically.
- * Note: The held-out problems live at the top level of testcases/ alongside training problems.
+ * Problems may be in either the main testcases dir or the expansion dir.
  * The eval harness explicitly filters for them via problem name list rather than directory structure.
  */
 export function loadHeldOutProblems() {
   // Held-out problems: explicitly named rather than directory-based
-  const heldOutNames = ["binary-search", "climbing-stairs", "container-with-most-water", "coin-change-ii"];
+  const heldOutNames = [
+    // Original 4
+    "binary-search",
+    "climbing-stairs",
+    "container-with-most-water",
+    "coin-change-ii",
+    // New 4 (expansion to N=8)
+    "two-sum",                // hash-map pattern
+    "valid-palindrome",       // two-pointers pattern
+    "number-of-islands",      // graph traversal / DFS pattern
+    "invert-binary-tree",     // tree recursion pattern
+    // Stress-suite MVP (P1, P3, P4, P7) — failure-rich problems
+    "edit-distance",          // DP 2D — base case + recurrence complexity
+    "word-break",             // DP + string — overlapping subproblems
+    "detect-cycle",           // linked list — Floyd's cycle detection / set invariant
+    "valid-sudoku",           // multi-constraint validation — rows, cols, boxes
+  ];
   const heldOut = [];
 
   for (const name of heldOutNames) {
-    const taskPath = join(PROBLEMS_DIR, name, "task.txt");
-    if (existsSync(taskPath)) {
+    const dir = findProblemDir(name);
+    if (dir) {
       heldOut.push(loadProblem(name));
     }
   }

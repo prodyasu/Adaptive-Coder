@@ -103,6 +103,82 @@ export function buildCriteriaVector({ pass, failureKind = 'model_error', failure
   };
 }
 
+/**
+ * Build a graded criteria vector using continuous metrics from test results.
+ *
+ * Grading rules:
+ *   - correctness: primaryPassRate (fraction of primary tests passed)
+ *   - interfaceContract: 1 if sig-repair not needed, else 0.5 (name was wrong but repairable)
+ *   - edgeCases: heldOutPassRate (fraction of held-out tests passed)
+ *   - specAlignment: 1 - (failureKind === 'spec_validation' ? 1 : 0)
+ *   - formatProtocol: 1 - (failureKind === 'format_protocol' ? 1 : 0)
+ *   - repairability: 1 if code produced, 0 if empty; 0.5 if autorepair exhausted
+ *   - cohAtrRisk: continuous metric from held-out discriminativity (0 = no risk, 1 = max risk)
+ *
+ * When held-out data is unavailable, falls back to binary buildCriteriaVector.
+ */
+export function buildGradedCriteriaVector({
+  primaryPassRate = null,
+  heldOutPassRate = null,
+  cohAtrRisk = null,
+  failureKind = 'model_error',
+  failureCode,
+  failureSubKind,
+  sigRepair = null,
+  codeProduced = true,
+  autorepairExhausted = false,
+} = {}) {
+  const vector = fullPassVector();
+
+  // Correctness: fraction of primary tests passed (continuous)
+  if (primaryPassRate !== null) {
+    vector.correctness = primaryPassRate;
+  } else if (failureKind === 'pass' || failureKind === null) {
+    vector.correctness = 1;
+  } else {
+    vector.correctness = 0;
+  }
+
+  // Interface contract: penalized if sig-repair was needed
+  vector.interfaceContract = sigRepair ? 0.5 : 1;
+
+  // Edge cases: use held-out pass rate (continuous — primary tests don't test edges well)
+  if (heldOutPassRate !== null) {
+    vector.edgeCases = heldOutPassRate;
+  }
+
+  // Spec alignment: penalize spec_validation failures
+  vector.specAlignment = failureKind === 'spec_validation' ? 0 : 1;
+
+  // Format protocol: penalize format_protocol failures
+  vector.formatProtocol = failureKind === 'format_protocol' ? 0 : 1;
+
+  // Repairability: 0 if no code, 0.5 if autorepair exhausted, 1 if code produced
+  if (!codeProduced) {
+    vector.repairability = 0;
+  } else if (autorepairExhausted) {
+    vector.repairability = 0.5;
+  }
+
+  // COH_ATR risk: continuous from held-out discriminativity
+  if (cohAtrRisk !== null && !isNaN(cohAtrRisk)) {
+    vector.cohAtrRisk = cohAtrRisk;
+  }
+
+  const failureCriterion = primaryPassRate === 1 && cohAtrRisk === 0
+    ? null
+    : (FAILURE_TO_CRITERION[failureKind] ?? 'repairability');
+
+  return {
+    ...vector,
+    failureKind: primaryPassRate === 1 ? 'pass' : failureKind,
+    failureSubKind,
+    failureCode: primaryPassRate === 1 ? 'pass' : failureCode,
+    failureCriterion,
+    _graded: true,  // Marker for downstream to know this is graded, not binary
+  };
+}
+
 export function validateCriteriaVector(vector) {
   const errors = [];
   for (const criterion of CRITERIA) {
@@ -135,14 +211,37 @@ export function resolveUpdateTarget(criteriaVector, map = CRITERION_COMPONENT_MA
 /**
  * Attach Reasoning OS metadata (route, criteriaVector, updateTarget) to an
  * attempt object. Used by evalProblem when baselineKind === 'reasoning_os_v0'.
+ * If held-out metrics are available on the trace, uses graded criteria vector.
  */
-export function attachReasoningOsToAttempt({ attempt, route }) {
-  const criteriaVector = buildCriteriaVector({
-    pass: Boolean(attempt.pass),
-    failureKind: attempt.failureKind ?? (attempt.pass ? 'pass' : 'model_error'),
-    failureCode: attempt.failureCode,
-    failureSubKind: attempt.failureSubKind,
-  });
+export function attachReasoningOsToAttempt({ attempt, route, trace } = {}) {
+  // Check if we have held-out data for graded criteria vector
+  const traceData = trace || attempt?.traceLog || {};
+  const hasHeldOut = traceData.primaryPassRate !== undefined || traceData.heldOutPassRate !== undefined;
+
+  let criteriaVector;
+  if (hasHeldOut) {
+    // Use graded criteria vector with continuous metrics
+    criteriaVector = buildGradedCriteriaVector({
+      primaryPassRate: traceData.primaryPassRate ?? (attempt.pass ? 1 : 0),
+      heldOutPassRate: traceData.heldOutPassRate ?? null,
+      cohAtrRisk: traceData.cohAtrRisk ?? null,
+      failureKind: attempt.failureKind ?? (attempt.pass ? 'pass' : 'model_error'),
+      failureCode: attempt.failureCode,
+      failureSubKind: attempt.failureSubKind,
+      sigRepair: traceData.sigRepair ?? null,
+      codeProduced: attempt.errorDetail !== 'empty response' && attempt.errorDetail !== 'coder produced no code',
+      autorepairExhausted: attempt.errorDetail === 'autorepair exhausted',
+    });
+  } else {
+    // Fall back to binary criteria vector
+    criteriaVector = buildCriteriaVector({
+      pass: Boolean(attempt.pass),
+      failureKind: attempt.failureKind ?? (attempt.pass ? 'pass' : 'model_error'),
+      failureCode: attempt.failureCode,
+      failureSubKind: attempt.failureSubKind,
+    });
+  }
+
   const updateTarget = resolveUpdateTarget(criteriaVector);
   return {
     ...attempt,

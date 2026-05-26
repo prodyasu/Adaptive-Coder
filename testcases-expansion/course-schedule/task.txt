@@ -1,0 +1,14 @@
+Given the total number of courses and a list of prerequisite pairs, return true if it is possible to finish all courses. Each prerequisite pair [a, b] means you must take course b before course a.
+
+Example:
+Input: numCourses = 2, prerequisites = [[1,0]]
+Output: true (take course 0, then course 1)
+
+Input: numCourses = 2, prerequisites = [[1,0],[0,1]]
+Output: false (circular dependency)
+
+Constraints:
+- 1 <= numCourses <= 2000
+- 0 <= prerequisites.length <= 5000
+- prerequisites[i].length == 2
+- All pairs are unique

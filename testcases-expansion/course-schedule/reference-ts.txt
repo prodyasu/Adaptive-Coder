@@ -1,0 +1,23 @@
+export function canFinish(numCourses: number, prerequisites: number[][]): boolean {
+  const adj: number[][] = Array.from({ length: numCourses }, () => []);
+  for (const [course, pre] of prerequisites) {
+    adj[pre].push(course);
+  }
+  const visited: number[] = new Array(numCourses).fill(0);
+
+  function hasCycle(node: number): boolean {
+    if (visited[node] === 1) return true;
+    if (visited[node] === 2) return false;
+    visited[node] = 1;
+    for (const neighbor of adj[node]) {
+      if (hasCycle(neighbor)) return true;
+    }
+    visited[node] = 2;
+    return false;
+  }
+
+  for (let i = 0; i < numCourses; i++) {
+    if (visited[i] === 0 && hasCycle(i)) return false;
+  }
+  return true;
+}

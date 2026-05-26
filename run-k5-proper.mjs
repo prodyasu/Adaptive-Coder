@@ -9,7 +9,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 
-const PROBLEMS = ['binary-search', 'climbing-stairs', 'container-with-most-water', 'coin-change-ii'];
+const PROBLEMS = ['binary-search', 'climbing-stairs', 'container-with-most-water', 'coin-change-ii', 'two-sum', 'valid-palindrome', 'number-of-islands', 'invert-binary-tree'];
 const BASELINES = ['reasoning_os_v0', 'gen18_evolved'];
 const K = 5; // 5 independent trials per problem
 const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-');

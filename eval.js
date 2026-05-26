@@ -35,8 +35,14 @@ import { loadReference, getPrimarySignature } from "./ref-sig.js";
 import { translateSignature, formatPythonSignature } from "./ts-to-py.js";
 import { validateSpec, loadExpectedSignature } from "./spec-validator.js";
 import { repairSignatureName } from "./sig-repair.js";
+import { applyConstraintOrdering } from "./constraint-ordering.js";
 import { writeTraceLog } from "./trace-log.js";
 import { classifyFailureDetail } from "./failure-metrics.js";
+import { runHeldOutTests, calculateCohAtrRisk } from "./held-out-test-suites.js";
+import { getDriftName, applyDrift, isDriftEnabled } from "./induced-drift.js";
+import { attachSelfCorrectionToTrace } from "./self-correction-logger.js";
+import { buildInformedRepairFeedback, INFORMED_REPAIR_MODES, extractTestFailure } from "./informed-repair.js";
+import { applyInvariantConstrainedGeneration, formatInvariantsForCoder } from "./invariant-constrained-generation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,7 +81,7 @@ function recordAttemptTrace({ opts, problemName, baselineKind, attempt, pass, st
   }
 }
 
-const TIMEOUT_MS = 15_000;  // 15s — enough for valid calls with reduced maxTokens
+const TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS) || 25_000;  // 25s default; override via env
 const MAX_ATTEMPTS = 5;
 const MAX_AUTOREPAIR_CYCLES = 2;
 const TIMEOUT_BACKOFF_MS = [5_000, 10_000, 20_000];
@@ -139,9 +145,9 @@ Output ONLY valid JSON matching this schema:
 // Kimi: cleaner coder output, used when budget available
 // Any call can be retried on alternate model if timeout/rate-limit
 // ---------------------------------------------------------------------------
-const SHAPER_MODEL = 'minimax-m2.7:cloud';
-const CODER_MODEL = 'minimax-m2.7:cloud';
-const VERIFIER_MODEL = 'minimax-m2.7:cloud';
+const SHAPER_MODEL = process.env.SHAPER_MODEL || 'minimax-m2.7:cloud';
+const CODER_MODEL = process.env.CODER_MODEL || 'minimax-m2.7:cloud';
+const VERIFIER_MODEL = process.env.VERIFIER_MODEL || 'minimax-m2.7:cloud';
 
 // Resolve model for a given stage (with fallback for consistent failures)
 const modelCache = { shaper: SHAPER_MODEL, coder: CODER_MODEL, verifier: VERIFIER_MODEL };
@@ -197,7 +203,7 @@ function ensureTypingImports(code) {
   return code;
 }
 
-function buildCoderPrompt(problemName) {
+function buildCoderPrompt(problemName, driftName = null) {
   // Load reference signature
   const refPath = join(__dirname, "../shaper-autorepair/testcases", problemName, "reference.ts");
   let actualPath = refPath;
@@ -217,7 +223,14 @@ function buildCoderPrompt(problemName) {
     return CODER_PROMPT_TEMPLATE.replace('{{SIGNATURE}}', 'to be determined from spec');
   }
   
-  const pySig = translateSignature(primary);
+  // When drift is enabled, replace function name with drift name in coder prompt
+  // so the model generates code using the drifted name. Sig-repair will then
+  // restore the original name, testing the full detect→repair→validate cycle.
+  const effectivePrimary = driftName
+    ? { ...primary, name: driftName }
+    : primary;
+  
+  const pySig = translateSignature(effectivePrimary);
   const formatted = formatPythonSignature(pySig);
   
   return CODER_PROMPT_TEMPLATE.replace('{{SIGNATURE}}', formatted);
@@ -227,7 +240,10 @@ function buildCoderPrompt(problemName) {
 
 export async function evalProblem(problemName, baselineKind, model, opts = {}) {
   const { signal } = opts;
-  const taskPath = join(__dirname, "../shaper-autorepair/testcases", problemName, "task.txt");
+  let taskPath = join(__dirname, "../shaper-autorepair/testcases", problemName, "task.txt");
+  if (!existsSync(taskPath)) {
+    taskPath = join(__dirname, "testcases-expansion", problemName, "task.txt");
+  }
   const task = readFileSync(taskPath, "utf8").trim();
 
   // Route for reasoning_os_v0 baseline (used even before model calls)
@@ -251,6 +267,9 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         waitMs: 0,
         autorepairCycles: 0,
         originalBaselineKind: baselineKind,
+        inducedDrift: opts.inducedDrift || false,
+        autorepairFeedbackMode: opts.autorepairFeedbackMode || INFORMED_REPAIR_MODES.VERIFIER,
+        icgEnabled: opts.icgEnabled || false,
       });
 
       const failureDetail = classifyFailureDetail({
@@ -271,10 +290,30 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         failureKind,
         failureSubKind: failureDetail.subKind,
         failureCode: failureDetail.code,
+        // Propagate held-out + self-correction metrics from trace to attempt record
+        primaryPassRate: result.primaryPassRate ?? (result.trace?.primaryPassRate ?? undefined),
+        heldOutPassRate: result.heldOutPassRate ?? (result.trace?.heldOutPassRate ?? undefined),
+        heldOutPassed: result.heldOutPassed ?? (result.trace?.heldOutPassed ?? undefined),
+        heldOutTotal: result.heldOutTotal ?? (result.trace?.heldOutTotal ?? undefined),
+        cohAtrRisk: result.cohAtrRisk ?? (result.trace?.cohAtrRisk ?? undefined),
+        selfCorrection: result.trace?.selfCorrection ?? undefined,
+        sigRepair: result.trace?.sigRepair ?? undefined,
+        // Propagate informed repair fields from trace to attempt record (R4 metrics)
+        informedRepairFeedback: result.trace?.informedRepairFeedback ?? undefined,
+        informedRepairMode: result.trace?.informedRepairMode ?? undefined,
+        // Propagate ICG fields from trace to attempt record (Delta 6)
+        icg: result.trace?.icg ?? undefined,
       };
       if (route) {
-        attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
+        attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route, trace: result.trace || result });
       }
+      // Self-correction: passive logger, attaches to trace
+      attachSelfCorrectionToTrace(result.trace || {}, {
+        pass: result.pass,
+        autorepairCycles: result.autorepairCycles,
+        stageFailed: result.stageFailed,
+        errorDetail: result.errorDetail,
+      });
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -321,6 +360,12 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         if (route) {
           attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
         }
+        attachSelfCorrectionToTrace({ errorName: err.name, errorMessage: err.message }, {
+          pass: false,
+          autorepairCycles: 0,
+          stageFailed,
+          errorDetail: `${TIMEOUT_MS}ms limit`,
+        });
         const traceLog = recordAttemptTrace({
           opts,
           problemName,
@@ -362,6 +407,12 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
       if (route) {
         attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route });
       }
+      attachSelfCorrectionToTrace({ errorName: err.name, errorMessage: err.message }, {
+        pass: false,
+        autorepairCycles: 0,
+        stageFailed: 'model_error',
+        errorDetail: err.message?.slice(0, 100) || 'unknown',
+      });
       const traceLog = recordAttemptTrace({
         opts,
         problemName,
@@ -395,11 +446,17 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
   let waitMs = ctx.waitMs || 0;
   let autorepairCycles = ctx.autorepairCycles || 0;
 
+  // Compute drift name for coder prompt injection.
+  // When drift is enabled, the coder prompt uses the drifted function name
+  // so the model generates code with that name. Sig-repair then restores
+  // the original name — testing the full detect→repair→validate cycle.
+  const driftName = isDriftEnabled(ctx) ? getDriftName(problemName) : null;
+
   if (baselineKind === "raw_base") {
     // Single coder call → code
     const t0 = Date.now();
     const response = await callOllama(getModelForStage('coder'), [
-      { role: "system", content: buildCoderPrompt(problemName) },
+      { role: "system", content: buildCoderPrompt(problemName, driftName) },
       { role: "user", content: `Task: ${task}\n\nWrite Python code to solve this. Output only code, no markdown.` }
     ], { timeoutMs: TIMEOUT_MS, signal, maxTokens: 800 });
 
@@ -420,6 +477,9 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
 
     const testResult = runBasicTest(problemName, code);
     trace.testDetail = testResult.detail;
+    if (testResult.primaryPassRate !== undefined) trace.primaryPassRate = testResult.primaryPassRate;
+    if (testResult.heldOutPassRate !== undefined) trace.heldOutPassRate = testResult.heldOutPassRate;
+    if (testResult.cohAtrRisk !== undefined) trace.cohAtrRisk = testResult.cohAtrRisk;
     return { pass: testResult.pass, errorDetail: testResult.detail, waitMs, modelMs, autorepairCycles, trace };
   }
 
@@ -462,6 +522,18 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     return { pass: false, errorDetail: "shaper JSON parse failed", waitMs, modelMs: shaperMs, autorepairCycles, stageFailed: "shaper_error", trace };
   }
 
+  // ── Delta 6: Invariant-Constrained Generation (ICG) ──
+  // PERM_GRAD principle: interventions that act at generation time can move outcomes.
+  // ICG derives structural invariants from the Shaper spec and injects them into
+  // the Coder prompt BEFORE code is written. Opt-in flag; no effect on existing baselines.
+  let icgResult = null;
+  let icgInvariantSection = null;
+  if (ctx.icgEnabled) {
+    icgResult = applyInvariantConstrainedGeneration(spec, problemName, { icgEnabled: true });
+    icgInvariantSection = icgResult.invariantSection;
+    trace.icg = icgResult.trace;
+  }
+
   // Step 2: Coder → code
   let feedback = null;
   let code = null;
@@ -475,7 +547,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     let coderResponse;
     try {
       coderResponse = await callOllama(getModelForStage('coder'), [
-      { role: "system", content: buildCoderPrompt(problemName) },
+        { role: "system", content: buildCoderPrompt(problemName, driftName) + (icgInvariantSection || '') },
         { role: "user", content: userPrompt }
       ], { timeoutMs: 25_000, signal, maxTokens: 4000 }); // 4000 tokens enough for code solutions
     } catch (err) {
@@ -496,9 +568,24 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     // Signature repair for reasoning_os_v0 baseline
     const effectiveOriginalBaseline = ctx.originalBaselineKind || baselineKind;
     if (effectiveOriginalBaseline === 'reasoning_os_v0') {
-      const expectedSig = loadExpectedSignature(problemName);
-      if (expectedSig && expectedSig.name) {
-        const { repaired, repairedName, originalName } = repairSignatureName(code, expectedSig.name);
+      let expectedSig = loadExpectedSignature(problemName);
+
+      // Induced drift: remap expected name to non-idiomatic for deterministic capability test
+      if (isDriftEnabled(ctx)) {
+        expectedSig = applyDrift(expectedSig, problemName);
+        if (expectedSig?.driftApplied) {
+          trace.inducedDrift = { originalName: expectedSig.originalName, driftName: expectedSig.name };
+        }
+      }
+
+      // When drift is applied, sig-repair should RESTORE the original name,
+      // not propagate the drifted name. Repair = restore to spec, not adapt to drift.
+      const repairTargetName = (isDriftEnabled(ctx) && expectedSig?.originalName)
+        ? expectedSig.originalName   // drift mode: restore to spec name (e.g., "search")
+        : expectedSig.name;         // normal mode: rename to expected name
+
+      if (expectedSig && repairTargetName) {
+        const { repaired, repairedName, originalName } = repairSignatureName(code, repairTargetName);
         if (repairedName) {
           trace.sigRepair = { originalName, repairedName };
           code = repaired;
@@ -547,6 +634,9 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     if (baselineKind === "gen0_seed") {
       const testResult = runBasicTest(problemName, code);
       trace.testDetail = testResult.detail;
+      if (testResult.primaryPassRate !== undefined) trace.primaryPassRate = testResult.primaryPassRate;
+      if (testResult.heldOutPassRate !== undefined) trace.heldOutPassRate = testResult.heldOutPassRate;
+      if (testResult.cohAtrRisk !== undefined) trace.cohAtrRisk = testResult.cohAtrRisk;
       return {
         pass: testResult.pass,
         errorDetail: testResult.detail,
@@ -592,6 +682,9 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
           // Verification passed — run basic test before final pass
           const testResult = runBasicTest(problemName, code);
           trace.testDetail = testResult.detail;
+          if (testResult.primaryPassRate !== undefined) trace.primaryPassRate = testResult.primaryPassRate;
+          if (testResult.heldOutPassRate !== undefined) trace.heldOutPassRate = testResult.heldOutPassRate;
+          if (testResult.cohAtrRisk !== undefined) trace.cohAtrRisk = testResult.cohAtrRisk;
           return {
             pass: testResult.pass,
             errorDetail: testResult.detail,
@@ -608,6 +701,25 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
         feedback = "Verifier response parse failed. try again";
         trace.verifierParseError = err.message || String(err);
       }
+    }
+
+    // ── Informed repair: inject concrete test failure into autorepair feedback ──
+    // PERM_GRAD principle: interventions must act at generation time or rewrite
+    // the artifact. Verifier suggestions are vague — "doesn't handle edge cases".
+    // Running the code and feeding back the actual error (e.g. "your function
+    // returned [0,1] but expected [1,2]") gives the model real failure signal.
+    const repairMode = ctx.autorepairFeedbackMode || INFORMED_REPAIR_MODES.VERIFIER;
+    if (repairMode !== INFORMED_REPAIR_MODES.VERIFIER && !feedback?.includes('[Previous attempt feedback:')) {
+      // Run tests to get concrete failure info
+      const repairTestResult = runBasicTest(problemName, code);
+      const repairTestOutput = repairTestResult.detail || '';
+
+      feedback = buildInformedRepairFeedback(problemName, code, repairTestOutput, repairMode, {
+        verifierFeedback: feedback,
+        specGuidance: trace.specValidation || null,
+      });
+      trace.informedRepairFeedback = feedback;
+      trace.informedRepairMode = repairMode;
     }
 
     // Autorepair loop (gen18 only)
@@ -634,7 +746,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
 // Basic test runner
 // ---------------------------------------------------------------------------
 
-export function runBasicTest(problemName, code) {
+export function runBasicTest(problemName, code, { includeHeldOut = true } = {}) {
   const moduleName = problemName.replace(/-/g, '_');
   const tmpDir = tmpdir();
   const modulePath = join(tmpDir, `${moduleName}.py`);
@@ -672,21 +784,96 @@ export function runBasicTest(problemName, code) {
     "min-stack": [
       `import min_stack as m; s=m.MinStack(); s.push(-2); s.push(0); s.push(-3); assert s.getMin() == -3; s.pop(); assert s.top() == 0; assert s.getMin() == -2`,
     ],
+    "two-sum": [
+      `from two_sum import ${fnName} as f; r = f([2,7,11,15], 9); assert set(r) == {0, 1}`,
+      `from two_sum import ${fnName} as f; r = f([3,2,4], 6); assert set(r) == {1, 2}`,
+      `from two_sum import ${fnName} as f; r = f([3,3], 6); assert set(r) == {0, 1}`,
+    ],
+    "valid-palindrome": [
+      `from valid_palindrome import ${fnName} as f; assert f("A man, a plan, a canal: Panama") == True`,
+      `from valid_palindrome import ${fnName} as f; assert f("race a car") == False`,
+      `from valid_palindrome import ${fnName} as f; assert f(" ") == True`,
+      `from valid_palindrome import ${fnName} as f; assert f("ab") == False`,
+    ],
+    "number-of-islands": [
+      `from number_of_islands import ${fnName} as f; assert f([["1","1","1","1","0"],["1","1","0","1","0"],["1","1","0","0","0"],["0","0","0","0","0"]]) == 1`,
+      `from number_of_islands import ${fnName} as f; assert f([["1","1","0","0","0"],["1","1","0","0","0"],["0","0","1","0","0"],["0","0","0","1","1"]]) == 3`,
+      `from number_of_islands import ${fnName} as f; assert f([["1"]]) == 1`,
+      `from number_of_islands import ${fnName} as f; assert f([["0","0"],["0","0"]]) == 0`,
+    ],
+    "invert-binary-tree": [
+      `from invert_binary_tree import ${fnName} as f, TreeNode; r = f(TreeNode(4, TreeNode(2, TreeNode(1), TreeNode(3)), TreeNode(7, TreeNode(6), TreeNode(9)))); assert r.val == 4 and r.left.val == 7 and r.right.val == 2`,
+    ],
+    // --- Stress-suite MVP problems (P1, P3, P4, P7) ---
+    "edit-distance": [
+      `from edit_distance import ${fnName} as f; assert f("horse", "ros") == 3`,
+      `from edit_distance import ${fnName} as f; assert f("intention", "execution") == 5`,
+      `from edit_distance import ${fnName} as f; assert f("", "abc") == 3`,
+      `from edit_distance import ${fnName} as f; assert f("abc", "") == 3`,
+    ],
+    "word-break": [
+      `from word_break import ${fnName} as f; assert f("leetcode", ["leet","code"]) == True`,
+      `from word_break import ${fnName} as f; assert f("applepenapple", ["apple","pen"]) == True`,
+      `from word_break import ${fnName} as f; assert f("catsandog", ["cats","dog","sand","and","cat"]) == False`,
+    ],
+    "detect-cycle": [
+      `from detect_cycle import ListNode, ${fnName} as f; n3=ListNode(0); n2=ListNode(2); n1=ListNode(3,n2); n0=ListNode(-4,n3); n3.next=n0; n2.next=n3; assert f(n1) == True`,
+      `from detect_cycle import ListNode, ${fnName} as f; assert f(None) == False`,
+      `from detect_cycle import ListNode, ${fnName} as f; assert f(ListNode(1)) == False`,
+    ],
+    "valid-sudoku": [
+      `from valid_sudoku import ${fnName} as f; b=[["5","3",".",".","7",".",".",".","."],["6",".",".","1","9","5",".",".","."],[".","9","8",".",".",".",".","6","."],["8",".",".",".","6",".",".",".","3"],["4",".",".","8",".","3",".",".","1"],["7",".",".",".","2",".",".",".","6"],[".","6",".",".",".",".","2","8","."],[".",".",".","4","1","9",".",".","5"],[".",".",".",".","8",".",".","7","9"]]; assert f(b) == True`,
+      `from valid_sudoku import ${fnName} as f; b=[["8","3",".",".","7",".",".",".","."],["6",".",".","1","9","5",".",".","."],[".","9","8",".",".",".",".","6","."],["8",".",".",".","6",".",".",".","3"],["4",".",".","8",".","3",".",".","1"],["7",".",".",".","2",".",".",".","6"],[".","6",".",".",".",".","2","8","."],[".",".",".","4","1","9",".",".","5"],[".",".",".",".","8",".",".","7","9"]]; assert f(b) == False`,
+      `from valid_sudoku import ${fnName} as f; b=[[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."]]; assert f(b) == True`,
+    ],
   };
 
   const tests = testSuites[problemName];
   if (!tests) return { pass: false, detail: `no test suite for ${problemName}` };
 
   try {
+    let passedCount = 0;
+    let failedTests = [];
     for (const test of tests) {
-      execFileSync("python3", ["-c", test], {
-        cwd: tmpDir,
-        timeout: 3000,
-        stdio: "pipe",
-        env: { ...process.env, PYTHONPATH: tmpDir },
-      });
+      try {
+        execFileSync("python3", ["-c", test], {
+          cwd: tmpDir,
+          timeout: 3000,
+          stdio: "pipe",
+          env: { ...process.env, PYTHONPATH: tmpDir },
+        });
+        passedCount++;
+      } catch (e) {
+        failedTests.push(test);
+      }
     }
-    return { pass: true };
+
+    const primaryPass = passedCount === tests.length;
+    const primaryPassRate = passedCount / tests.length;
+
+    // Run held-out discriminativity tests
+    let heldOutResult = null;
+    let cohAtrRisk = null;
+    if (includeHeldOut) {
+      heldOutResult = runHeldOutTests(problemName, fnName, tmpDir);
+      cohAtrRisk = calculateCohAtrRisk(primaryPassRate, heldOutResult.passRate);
+    }
+
+    const result = {
+      pass: primaryPass,
+      detail: primaryPass ? undefined : (failedTests[0] ? String(failedTests[0]).slice(0, 100) : "assertion failed"),
+      primaryPassRate,
+      primaryPassed: passedCount,
+      primaryTotal: tests.length,
+    };
+    if (heldOutResult) {
+      result.heldOutPassRate = heldOutResult.passRate;
+      result.heldOutPassed = heldOutResult.passed;
+      result.heldOutTotal = heldOutResult.total;
+      result.heldOutDetails = heldOutResult.details;
+      result.cohAtrRisk = cohAtrRisk;
+    }
+    return result;
   } catch (e) {
     return { pass: false, detail: e.message?.split("\n").pop() || "assertion failed" };
   }
