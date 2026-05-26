@@ -103,6 +103,8 @@ export function summarizeTrial({ trial, entries, error }) {
       primaryPassRate: null,
       cohAtrRisk: null,
       autorepairCycles: 0,
+      pggResamples: 0,
+      pggExhausted: false,
       error: error.message || String(error),
     };
   }
@@ -127,6 +129,8 @@ export function summarizeTrial({ trial, entries, error }) {
     primaryPassRate: first.primaryPassRate ?? last.primaryPassRate ?? null,
     cohAtrRisk: first.cohAtrRisk ?? last.cohAtrRisk ?? null,
     autorepairCycles: entries.reduce((sum, [, v]) => sum + (v?.autorepairCycles || 0), 0),
+    pggResamples: entries.reduce((sum, [, v]) => sum + (v?.pgg?.resampleNumber || 0), 0),
+    pggExhausted: entries.some(([, v]) => v?.pgg?.exhausted),
     informedRepairMode: repairAttempt?.informedRepairMode ?? last.informedRepairMode ?? null,
     attempts: entries.map(([idx, v]) => ({
       attempt: Number(idx) + 1,

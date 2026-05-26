@@ -257,7 +257,10 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
     : null;
 
   // Internal execution uses gen18 pipeline for reasoning_os_v0
-  const effectiveBaselineKind = baselineKind === "reasoning_os_v0" ? "gen18_evolved" : baselineKind;
+  // PGG v0 uses the gen18_evolved pipeline with pggEnabled=true as the intervention
+  const effectiveBaselineKind = (baselineKind === "reasoning_os_v0" || baselineKind === "pgg_v0")
+    ? "gen18_evolved"
+    : baselineKind;
 
   const attempts = [];
 
