@@ -43,6 +43,10 @@ import { getDriftName, applyDrift, isDriftEnabled } from "./induced-drift.js";
 import { attachSelfCorrectionToTrace } from "./self-correction-logger.js";
 import { buildInformedRepairFeedback, INFORMED_REPAIR_MODES, extractTestFailure } from "./informed-repair.js";
 import { applyInvariantConstrainedGeneration, formatInvariantsForCoder } from "./invariant-constrained-generation.js";
+import { extractAssertions } from "./problem-assertions.js";
+import { pggFilter, pggFilterAuto, MAX_PGG_RESAMPLES } from "./pgg-filter.js";
+import { buildPggCoderPrompt, formatPggAssertions } from "./pgg-prompt.js";
+import { classifyFailure } from "./diagnostician.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -270,6 +274,7 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         inducedDrift: opts.inducedDrift || false,
         autorepairFeedbackMode: opts.autorepairFeedbackMode || INFORMED_REPAIR_MODES.VERIFIER,
         icgEnabled: opts.icgEnabled || false,
+        pggEnabled: opts.pggEnabled || false,
       });
 
       const failureDetail = classifyFailureDetail({
@@ -303,6 +308,9 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
         informedRepairMode: result.trace?.informedRepairMode ?? undefined,
         // Propagate ICG fields from trace to attempt record (Delta 6)
         icg: result.trace?.icg ?? undefined,
+        // Propagate PGG fields from trace to attempt record
+        pgg: result.trace?.pgg ?? undefined,
+        pggResamples: result.trace?.pgg?.resampleNumber ?? 0,
       };
       if (route) {
         attemptRecord = attachReasoningOsToAttempt({ attempt: attemptRecord, route, trace: result.trace || result });
@@ -526,87 +534,208 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
   // PERM_GRAD principle: interventions that act at generation time can move outcomes.
   // ICG derives structural invariants from the Shaper spec and injects them into
   // the Coder prompt BEFORE code is written. Opt-in flag; no effect on existing baselines.
+  // NOTE: If pggEnabled is true, ICG is superseded and icgEnabled is ignored.
   let icgResult = null;
   let icgInvariantSection = null;
-  if (ctx.icgEnabled) {
+  if (ctx.icgEnabled && !ctx.pggEnabled) {
+    // Only apply ICG if PGG is not enabled (PGG supersedes ICG)
     icgResult = applyInvariantConstrainedGeneration(spec, problemName, { icgEnabled: true });
     icgInvariantSection = icgResult.invariantSection;
     trace.icg = icgResult.trace;
+  } else if (ctx.pggEnabled) {
+    // PGG supersedes ICG — log this deprecation warning
+    if (ctx.icgEnabled) {
+      console.warn('[eval] pggEnabled=true supersedes icgEnabled — ICG ignored');
+    }
+  }
+
+  // ── PGG: Predicate-Gated Generation ──
+  // PGG runs assertions against generated code BEFORE the verifier.
+  // Failed assertions cause rejection sampling (resample up to MAX_PGG_RESAMPLES)
+  // without counting against k. This is a generation-time filter, not a verifier.
+  let pggAssertions = [];
+  if (ctx.pggEnabled) {
+    pggAssertions = extractAssertions(problemName, spec);
+    trace.pggAssertions = { count: pggAssertions.length, problem: problemName };
   }
 
   // Step 2: Coder → code
   let feedback = null;
   let code = null;
 
+  // PGG rejection sampling: resample within trial until accepted or MAX_PGG_RESAMPLES hit.
+  // CRITICAL: PGG resamples do NOT count against k or coderAttempt — they're a free
+  // inner loop. Only Verifier-accepted attempts count toward the k-trial budget.
+  let pggResamples = 0;
+  let pggPassedCurrentAttempt = false;
+
   for (let coderAttempt = 0; coderAttempt < 2; coderAttempt++) {
+    // ── PGG inner loop: resample until assertions pass or budget exhausted ──
+    // This runs BEFORE the verifier. Failed assertions = free resample, no k cost.
+    pggPassedCurrentAttempt = false;
+
+    if (ctx.pggEnabled && pggAssertions.length > 0 && coderAttempt === 0) {
+      // Only run PGG gate on first coderAttempt. On autorepair (coderAttempt > 0),
+      // we re-check PGG after code generation below.
+      // (PGG feedback from rejection is set as `feedback` below)
+    }
+
+    // Build Coder prompt — inject PGG assertions if PGG is enabled
+    const baseCoderPrompt = buildCoderPrompt(problemName, driftName);
+    const pggPromptSection = (ctx.pggEnabled && pggAssertions.length > 0)
+      ? formatPggAssertions(pggAssertions, 'f')
+      : '';
+    const icgPromptSection = (!ctx.pggEnabled && icgEnabled && icgInvariantSection)
+      ? icgInvariantSection
+      : '';
+    const coderPromptWithPgg = baseCoderPrompt + pggPromptSection + icgPromptSection;
+
     const userPrompt = feedback
-      ? `Implement the following specification:\n\n\`\`\`json\n${JSON.stringify(spec, null, 2)}\n\`\`\`\n\n[Previous attempt feedback: ${feedback}]`
-      : `Implement the following specification:\n\n\`\`\`json\n${JSON.stringify(spec, null, 2)}\n\`\`\``;
+      ? `Implement the following specification:\n\n\`\`\`json\n${JSON.stringify(spec, null, 2)}\`\`\`\n\n[Previous attempt feedback: ${feedback}]`
+      : `Implement the following specification:\n\n\`\`\`json\n${JSON.stringify(spec, null, 2)}\`\`\``;
 
-    const tCoder = Date.now();
-    let coderResponse;
-    try {
-      coderResponse = await callOllama(getModelForStage('coder'), [
-        { role: "system", content: buildCoderPrompt(problemName, driftName) + (icgInvariantSection || '') },
-        { role: "user", content: userPrompt }
-      ], { timeoutMs: 25_000, signal, maxTokens: 4000 }); // 4000 tokens enough for code solutions
-    } catch (err) {
-      if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError) {
-        const delay = err instanceof OllamaTimeoutError ? (TIMEOUT_BACKOFF_MS[coderAttempt] ?? 20_000) : RATE_LIMIT_DELAY_MS;
-        waitMs += delay;
-        await sleep(delay);
+    // ── PGG inner resample loop (does NOT advance coderAttempt) ──
+    // We call the coder repeatedly until PGG accepts or we exhaust resamples.
+    // Each resample is a fresh coder call with PGG assertion feedback.
+    const maxPggResamplesForThisAttempt = MAX_PGG_RESAMPLES;
+    let pggResampleIndex = 0;
+    let coderMs = 0; // track across PGG resamples within this coderAttempt
+
+    while (pggResampleIndex < maxPggResamplesForThisAttempt) {
+      const tCoder = Date.now();
+      let coderResponse;
+      try {
+        coderResponse = await callOllama(getModelForStage('coder'), [
+          { role: "system", content: coderPromptWithPgg },
+          { role: "user", content: userPrompt }
+        ], { timeoutMs: 25_000, signal, maxTokens: 4000 }); // 4000 tokens enough for code solutions
+      } catch (err) {
+        if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError) {
+          const delay = err instanceof OllamaTimeoutError ? (TIMEOUT_BACKOFF_MS[coderAttempt] ?? 20_000) : RATE_LIMIT_DELAY_MS;
+          waitMs += delay;
+          await sleep(delay);
+        }
+        trace.coderError = err.message || String(err);
+        return { pass: false, errorDetail: "coder failed: " + err.message?.slice(0, 80), waitMs, modelMs: shaperMs, autorepairCycles, stageFailed: "coder_error", trace };
       }
-      trace.coderError = err.message || String(err);
-      return { pass: false, errorDetail: "coder failed: " + err.message?.slice(0, 80), waitMs, modelMs: shaperMs, autorepairCycles, stageFailed: "coder_error", trace };
-    }
-    const coderMs = Date.now() - tCoder;
-    trace.coderRaw = coderResponse.content || "";
+      coderMs += Date.now() - tCoder; // accumulate across PGG resamples
+      trace.coderRaw = coderResponse.content || "";
 
-    code = extractFromResponse(coderResponse);
-    code = ensureTypingImports(code); // Add typing imports if missing
+      code = extractFromResponse(coderResponse);
+      code = ensureTypingImports(code); // Add typing imports if missing
 
-    // Signature repair for reasoning_os_v0 baseline
-    const effectiveOriginalBaseline = ctx.originalBaselineKind || baselineKind;
-    if (effectiveOriginalBaseline === 'reasoning_os_v0') {
-      let expectedSig = loadExpectedSignature(problemName);
+      // Signature repair for reasoning_os_v0 baseline
+      const effectiveOriginalBaseline = ctx.originalBaselineKind || baselineKind;
+      if (effectiveOriginalBaseline === 'reasoning_os_v0') {
+        let expectedSig = loadExpectedSignature(problemName);
 
-      // Induced drift: remap expected name to non-idiomatic for deterministic capability test
-      if (isDriftEnabled(ctx)) {
-        expectedSig = applyDrift(expectedSig, problemName);
-        if (expectedSig?.driftApplied) {
-          trace.inducedDrift = { originalName: expectedSig.originalName, driftName: expectedSig.name };
+        // Induced drift: remap expected name to non-idiomatic for deterministic capability test
+        if (isDriftEnabled(ctx)) {
+          expectedSig = applyDrift(expectedSig, problemName);
+          if (expectedSig?.driftApplied) {
+            trace.inducedDrift = { originalName: expectedSig.originalName, driftName: expectedSig.name };
+          }
+        }
+
+        // When drift is applied, sig-repair should RESTORE the original name,
+        // not propagate the drifted name. Repair = restore to spec, not adapt to drift.
+        const repairTargetName = (isDriftEnabled(ctx) && expectedSig?.originalName)
+          ? expectedSig.originalName   // drift mode: restore to spec name (e.g., "search")
+          : expectedSig.name;         // normal mode: rename to expected name
+
+        if (expectedSig && repairTargetName) {
+          const { repaired, repairedName, originalName } = repairSignatureName(code, repairTargetName);
+          if (repairedName) {
+            trace.sigRepair = { originalName, repairedName };
+            code = repaired;
+          }
         }
       }
 
-      // When drift is applied, sig-repair should RESTORE the original name,
-      // not propagate the drifted name. Repair = restore to spec, not adapt to drift.
-      const repairTargetName = (isDriftEnabled(ctx) && expectedSig?.originalName)
-        ? expectedSig.originalName   // drift mode: restore to spec name (e.g., "search")
-        : expectedSig.name;         // normal mode: rename to expected name
+      trace.code = code;
 
-      if (expectedSig && repairTargetName) {
-        const { repaired, repairedName, originalName } = repairSignatureName(code, repairTargetName);
-        if (repairedName) {
-          trace.sigRepair = { originalName, repairedName };
-          code = repaired;
-        }
+      if (!code || code.length < 15) {
+        // No code produced — can't run PGG, treat as coder failure
+        pggResampleIndex++;
+        pggResamples++;
+        feedback = "No valid code was produced. Please provide a complete implementation.";
+        continue; // resample
       }
-    }
 
-    trace.code = code;
+      // Basic compile check
+      const tmpFile = join(tmpdir(), `eval_${problemName}.py`);
+      writeFileSync(tmpFile, code);
+      try {
+        execSync(`python3 -m py_compile ${tmpFile}`, { timeout: 3000 });
+      } catch (err) {
+        trace.compileError = err.stderr?.toString() || err.message || String(err);
+        // Compile error — resample if PGG is enabled, otherwise fail
+        if (ctx.pggEnabled && pggAssertions.length > 0) {
+          pggResampleIndex++;
+          pggResamples++;
+          feedback = "Code has compilation errors. Fix the syntax and try again.";
+          continue; // resample
+        }
+        return { pass: false, errorDetail: "compile error", waitMs, modelMs: shaperMs + coderMs, autorepairCycles, stageFailed: "coder_error", trace };
+      }
 
-    if (!code || code.length < 15) {
-      return { pass: false, errorDetail: "coder produced no code", waitMs, modelMs: shaperMs + coderMs, autorepairCycles, stageFailed: "coder_error", trace };
-    }
+      // ── PGG Filter (before verifier) ──
+      pggPassedCurrentAttempt = false;
+      if (ctx.pggEnabled && pggAssertions.length > 0) {
+        const fnMatch = code.match(/^def\s+(\w+)/m);
+        const classMatch = code.match(/^class\s+(\w+)/m);
+        const fnName = fnMatch ? fnMatch[1] : (classMatch ? classMatch[1] : 'f');
 
-    // Basic compile check
-    const tmpFile = join(tmpdir(), `eval_${problemName}.py`);
-    writeFileSync(tmpFile, code);
-    try {
-      execSync(`python3 -m py_compile ${tmpFile}`, { timeout: 3000 });
-    } catch (err) {
-      trace.compileError = err.stderr?.toString() || err.message || String(err);
-      return { pass: false, errorDetail: "compile error", waitMs, modelMs: shaperMs + coderMs, autorepairCycles, stageFailed: "coder_error", trace };
+        const pggResult = pggFilter(code, problemName, pggAssertions, fnName);
+        trace.pgg = {
+          accepted: pggResult.accepted,
+          failedCount: pggResult.failedCount,
+          totalCount: pggResult.totalCount,
+          results: pggResult.results?.map(r => ({ passed: r.passed, input: r.input, expected: r.expected })) || [],
+          coderAttempt,
+          pggResampleIndex,
+        };
+
+        if (!pggResult.accepted) {
+          // PGG rejected — resample (free, doesn't count against k or coderAttempt)
+          pggResampleIndex++;
+          pggResamples++;
+          trace.pgg.resampleNumber = pggResamples;
+
+          if (coderAttempt > 0) {
+            trace.pgg.afterAutorepair = true;
+          }
+
+          feedback = `Your code failed the predicate checks: ${pggResult.failedCount} of ${pggResult.totalCount} assertions failed. ` +
+                     `Correct the implementation to satisfy these constraints and try again.`;
+          trace.pggFeedback = feedback;
+          continue; // resample within the while loop (free, no k cost)
+        }
+
+        // PGG accepted — break out of resample loop
+        pggPassedCurrentAttempt = true;
+        trace.pgg.passed = true;
+        break;
+      } else {
+        // PGG not enabled — no filter, accept code as-is
+        pggPassedCurrentAttempt = true;
+        break;
+      }
+    } // end PGG resample while loop
+
+    // If PGG exhausted all resamples, record as PGG-exhausted failure
+    if (ctx.pggEnabled && pggAssertions.length > 0 && !pggPassedCurrentAttempt) {
+      trace.pgg = trace.pgg || {};
+      trace.pgg.exhausted = true;
+      return {
+        pass: false,
+        errorDetail: `pgg exhausted after ${MAX_PGG_RESAMPLES} resamples (attempted ${pggResampleIndex} resamples)`,
+        waitMs,
+        modelMs: shaperMs + coderMs,
+        autorepairCycles,
+        stageFailed: "pgg_exhausted",
+        trace,
+      };
     }
 
     // Spec validation gate
