@@ -588,7 +588,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     const pggPromptSection = (ctx.pggEnabled && pggAssertions.length > 0)
       ? formatPggAssertions(pggAssertions, 'f')
       : '';
-    const icgPromptSection = (!ctx.pggEnabled && icgEnabled && icgInvariantSection)
+    const icgPromptSection = (!ctx.pggEnabled && ctx.icgEnabled && icgInvariantSection)
       ? icgInvariantSection
       : '';
     const coderPromptWithPgg = baseCoderPrompt + pggPromptSection + icgPromptSection;
