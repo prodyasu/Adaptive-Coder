@@ -87,6 +87,33 @@ export function entriesFromAttemptResults(attemptResults) {
     .sort(([a], [b]) => Number(a) - Number(b));
 }
 
+export class ProviderQuotaError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ProviderQuotaError';
+    this.fatalProviderQuota = true;
+  }
+}
+
+export function isProviderQuotaText(text) {
+  return /session usage limit|usage limit|quota exceeded|insufficient quota|billing limit/i.test(String(text || ''));
+}
+
+export function isProviderQuotaError(error) {
+  return Boolean(error?.fatalProviderQuota || isProviderQuotaText(error?.message));
+}
+
+export function assertNoProviderQuotaFailure(entries, { problem, trial } = {}) {
+  for (const [, v] of entries || []) {
+    const detail = `${v?.errorDetail || ''}\n${v?.coderError || ''}\n${v?.shaperError || ''}\n${v?.verifierError || ''}`;
+    if (isProviderQuotaText(detail)) {
+      throw new ProviderQuotaError(
+        `Provider quota/session limit hit${problem ? ` on ${problem}` : ''}${trial ? ` trial ${trial}` : ''}: ${String(v?.errorDetail || detail).slice(0, 240)}`
+      );
+    }
+  }
+}
+
 export function summarizeTrial({ trial, entries, error }) {
   if (error) {
     return {
@@ -160,10 +187,15 @@ export async function runProblemTrials({ problem, baseline = DEFAULT_BASELINE, k
         ...extraEvalOpts,
       });
       clearTimeout(timeout);
-      const trialSummary = summarizeTrial({ trial, entries: entriesFromAttemptResults(attemptResults) });
+      const entries = entriesFromAttemptResults(attemptResults);
+      assertNoProviderQuotaFailure(entries, { problem, trial });
+      const trialSummary = summarizeTrial({ trial, entries });
       if (trialSummary.passAt1) passAt1Count++;
       trials.push(trialSummary);
     } catch (error) {
+      if (isProviderQuotaError(error)) {
+        throw error;
+      }
       trials.push(summarizeTrial({ trial, entries: [], error }));
     }
   }
