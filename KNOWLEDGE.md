@@ -1,7 +1,7 @@
 # Reasoning OS v0 — Project Knowledge
 
 > Living reference. Update when deltas, runs, or conventions change.
-> Last updated: 2026-05-24
+> Last updated: 2026-05-27
 
 ## Location
 
@@ -11,9 +11,15 @@
 
 ## What This Project Is
 
-A **measurable Reasoning OS** built as an instrumentation layer on top of a shaper→coder→verifier→autorepair eval harness. The OS adds routing, criteria vectors, component maps, and delta logging — turning pass/fail into discriminative failure signals that map to updateable scaffold components.
+A **measurable adaptive coding harness** built around shaper→coder→verifier→autorepair experiments. The original "Reasoning OS v0" metadata layer was falsified by best-of-5 (K0), and static PGG assertion injection was killed in Phase 1. The project now treats best-of-N as the mandatory baseline and focuses on dynamic, failure-conditioned interventions that can beat retry at comparable cost.
 
 **Core loop:** `failure signature → criterion → component → delta → measurement`
+
+## Current Status (2026-05-27)
+
+- **K0 best-of-5 kill test:** gen18 best-of-5 dominates OS v0 single-shot; simple retry is the mandatory baseline.
+- **PGG Phase 1:** static Predicate-Gated Generation is killed. PGG-5 = 10/20 pass@1 (50%) vs best-of-5 = 19/20 (95%); PGG-1 = 1/4 (25%) vs single-shot = 3/4 (75%). PGG fired (46 resamples in Arm C) but hurt via timeout/spec overhead.
+- **Next direction:** do not tune static PGG. Either build a dynamic Diagnostician→targeted constraint compiler loop that only acts after observed failures, or pivot benchmark domains where semantic constraints can plausibly beat retry.
 
 ## Baselines
 

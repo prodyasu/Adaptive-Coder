@@ -311,6 +311,139 @@ export function writeCompactReport({ summary, rawResults, runDir }) {
   return report;
 }
 
+function emptyMetric() {
+  return { count: 0, total: 0, rate: 0 };
+}
+
+function addTrialToMetrics(metrics, trial) {
+  metrics.totalTrials += 1;
+  metrics.passAt1.count += trial.passAt1 ? 1 : 0;
+  metrics.passAt1.total += 1;
+  metrics.passAtN.count += (trial.eventualPass || trial.passAtN) ? 1 : 0;
+  metrics.passAtN.total += 1;
+  metrics.repairEligibleCount += trial.repairEligible ? 1 : 0;
+  metrics.repairConvertedCount += trial.repairConverted ? 1 : 0;
+  metrics.pggResamples += trial.pggResamples || 0;
+
+  const heldOut = trial.heldOutPassRate ?? trial.heldOutAfterRepairRate;
+  if (heldOut !== null && heldOut !== undefined && !Number.isNaN(heldOut)) {
+    metrics.heldOutRate.count += heldOut;
+    metrics.heldOutRate.total += 1;
+  }
+  if (trial.cohAtrRisk !== null && trial.cohAtrRisk !== undefined && !Number.isNaN(trial.cohAtrRisk)) {
+    metrics._cohValues.push(trial.cohAtrRisk);
+  }
+
+  const classes = trial.failureClasses?.length ? trial.failureClasses : (trial.failureClass ? [trial.failureClass] : []);
+  for (const cls of classes) {
+    metrics.failureClassBreakdown[cls] = (metrics.failureClassBreakdown[cls] || 0) + 1;
+  }
+}
+
+function finalizeMetrics(metrics) {
+  metrics.passAt1.rate = metrics.passAt1.total ? metrics.passAt1.count / metrics.passAt1.total : 0;
+  metrics.passAtN.rate = metrics.passAtN.total ? metrics.passAtN.count / metrics.passAtN.total : 0;
+  metrics.repairConversionRate = metrics.repairEligibleCount ? metrics.repairConvertedCount / metrics.repairEligibleCount : null;
+  metrics.heldOutRate.rate = metrics.heldOutRate.total ? metrics.heldOutRate.count / metrics.heldOutRate.total : null;
+  metrics.avgCohAtrRisk = metrics._cohValues.length ? metrics._cohValues.reduce((a, b) => a + b, 0) / metrics._cohValues.length : null;
+  delete metrics._cohValues;
+  return metrics;
+}
+
+function newAggregateMetrics() {
+  return {
+    totalTrials: 0,
+    passAt1: emptyMetric(),
+    passAtN: emptyMetric(),
+    repairEligibleCount: 0,
+    repairConvertedCount: 0,
+    repairConversionRate: null,
+    heldOutRate: { count: 0, total: 0, rate: null },
+    avgCohAtrRisk: null,
+    failureClassBreakdown: {},
+    pggResamples: 0,
+    _cohValues: [],
+  };
+}
+
+export function buildMultiArmComparison(rawResults, { armMeta = {} } = {}) {
+  const comparison = {};
+
+  for (const [armKey, armResults] of Object.entries(rawResults || {})) {
+    const armMetrics = newAggregateMetrics();
+    const perProblem = {};
+
+    for (const [problem, result] of Object.entries(armResults || {})) {
+      const problemMetrics = newAggregateMetrics();
+      for (const trial of result.trials || []) {
+        addTrialToMetrics(problemMetrics, trial);
+        addTrialToMetrics(armMetrics, trial);
+      }
+      perProblem[problem] = finalizeMetrics(problemMetrics);
+    }
+
+    comparison[armKey] = {
+      label: armMeta[armKey]?.label || armKey,
+      ...finalizeMetrics(armMetrics),
+      perProblem,
+    };
+  }
+
+  return comparison;
+}
+
+export function buildMultiArmSummary({ runType, baseline, k, problems, rawResults, armMeta = {} }) {
+  const byArm = buildMultiArmComparison(rawResults, { armMeta });
+  const totalMetrics = newAggregateMetrics();
+
+  for (const armResults of Object.values(rawResults || {})) {
+    for (const result of Object.values(armResults || {})) {
+      for (const trial of result.trials || []) {
+        addTrialToMetrics(totalMetrics, trial);
+      }
+    }
+  }
+
+  return {
+    runType,
+    baseline,
+    k,
+    problems,
+    ...finalizeMetrics(totalMetrics),
+    byArm,
+  };
+}
+
+export function multiArmReportText({ summary }) {
+  const lines = [];
+  lines.push(`# ${summary.runType} multi-arm report`);
+  lines.push('');
+  lines.push(`baseline: ${summary.baseline}`);
+  lines.push(`problems: ${summary.problems.join(', ')}`);
+  lines.push(`k: ${summary.k}`);
+  lines.push(`total trials: ${summary.totalTrials}`);
+  lines.push(`aggregate pass@1: ${frac(summary.passAt1.count, summary.passAt1.total)}`);
+  lines.push(`aggregate pass@N: ${frac(summary.passAtN.count, summary.passAtN.total)}`);
+  lines.push(`aggregate PGG resamples: ${summary.pggResamples}`);
+  lines.push(`failure classes: ${formatFailureBreakdown(summary.failureClassBreakdown)}`);
+  lines.push('');
+  lines.push('## per-arm');
+  for (const [armKey, arm] of Object.entries(summary.byArm || {})) {
+    lines.push(`- ${armKey.toUpperCase()} (${arm.label}): pass@1=${frac(arm.passAt1.count, arm.passAt1.total)} pass@N=${frac(arm.passAtN.count, arm.passAtN.total)} repair=${arm.repairConvertedCount}/${arm.repairEligibleCount} pggResamples=${arm.pggResamples} failureClasses=${formatFailureBreakdown(arm.failureClassBreakdown)}`);
+  }
+  return lines.join('\n');
+}
+
+export function writeMultiArmReport({ summary, rawResults, runDir }) {
+  const report = multiArmReportText({ summary });
+  if (runDir) {
+    writeFileSync(join(runDir, 'summary.json'), JSON.stringify({ summary, rawResults }, null, 2));
+    writeFileSync(join(runDir, 'report.md'), report + '\n');
+    writeFileSync(join(runDir, 'compact-report.md'), report + '\n');
+  }
+  return report;
+}
+
 export function computeR4ModeMetrics(resultsByMode) {
   return Object.fromEntries(
     Object.entries(resultsByMode).map(([label, modeResults]) => [label, computeModeMetrics(modeResults)])

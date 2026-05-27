@@ -28,10 +28,12 @@ import {
   ensureRunDir,
   runProblemTrials,
   summarizeRun,
-  writeCompactReport,
+  buildMultiArmComparison,
+  buildMultiArmSummary,
+  writeMultiArmReport,
   frac,
 } from './stress-runner-utils.js';
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 // ---------------------------------------------------------------------------
@@ -171,60 +173,24 @@ if (!DRY_RUN && Object.keys(allResults).length > 0) {
   console.log('  COMPARATIVE ANALYSIS');
   console.log('='.repeat(60));
 
-  const comparison = {};
-  for (const armKey of armsToRun) {
-    const armResults = allResults[armKey];
-    if (!armResults) continue;
-
-    let totalPassAt1 = 0;
-    let totalTrials = 0;
-    let totalPassAtN = 0;
-    let totalPggResamples = 0;
-    let problemResults = {};
-
-    for (const [problem, result] of Object.entries(armResults)) {
-      const p1 = result.passAt1Count;
-      const total = result.trials.length;
-      const pN = result.trials.filter(t => t.eventualPass).length;
-      const resamples = result.trials.reduce((s, t) => s + (t.pggResamples || 0), 0);
-
-      totalPassAt1 += p1;
-      totalTrials += total;
-      totalPassAtN += pN;
-      totalPggResamples += resamples;
-
-      problemResults[problem] = {
-        passAt1: `${p1}/${total}`,
-        passAtN: `${pN}/${total}`,
-        pggResamples: resamples,
-      };
-    }
-
-    comparison[armKey] = {
-      label: ARMS[armKey].label,
-      passAt1: `${totalPassAt1}/${totalTrials} (${(totalPassAt1 / totalTrials * 100).toFixed(1)}%)`,
-      passAtN: `${totalPassAtN}/${totalTrials} (${(totalPassAtN / totalTrials * 100).toFixed(1)}%)`,
-      pggResamples: totalPggResamples,
-      perProblem: problemResults,
-    };
-  }
+  const comparison = buildMultiArmComparison(allResults, { armMeta: ARMS });
 
   // Kill criteria evaluation
   console.log('\n--- Kill Criteria ---');
   if (comparison.a && comparison.b && comparison.c) {
-    const bRate = parseFloat(comparison.b.passAt1.match(/\((\d+\.?\d*)%\)/)?.[1] || 0);
-    const cRate = parseFloat(comparison.c.passAt1.match(/\((\d+\.?\d*)%\)/)?.[1] || 0);
+    const bRate = comparison.b.passAt1.rate * 100;
+    const cRate = comparison.c.passAt1.rate * 100;
     const diff = cRate - bRate;
     const k3Status = diff > 25 ? '✅ SURVIVED' : diff > 10 ? '⚠️  MARGINAL' : '❌ KILLED';
-    console.log(`K3 (pass@1 dominance): PGG-5=${cRate}% vs best-of-5=${bRate}% → diff=${diff.toFixed(1)}pp → ${k3Status}`);
+    console.log(`K3 (pass@1 dominance): PGG-5=${cRate.toFixed(1)}% vs best-of-5=${bRate.toFixed(1)}% → diff=${diff.toFixed(1)}pp → ${k3Status}`);
   }
 
   if (comparison.a && comparison.d) {
-    const aRate = parseFloat(comparison.a.passAt1.match(/\((\d+\.?\d*)%\)/)?.[1] || 0);
-    const dRate = parseFloat(comparison.d.passAt1.match(/\((\d+\.?\d*)%\)/)?.[1] || 0);
+    const aRate = comparison.a.passAt1.rate * 100;
+    const dRate = comparison.d.passAt1.rate * 100;
     const diff = dRate - aRate;
     const k4Status = diff > 0 ? '✅ REJECTION HAS SIGNAL' : '❌ NO SIGNAL';
-    console.log(`K4 (rejection signal): PGG-1=${dRate}% vs single-shot=${aRate}% → diff=${diff.toFixed(1)}pp → ${k4Status}`);
+    console.log(`K4 (rejection signal): PGG-1=${dRate.toFixed(1)}% vs single-shot=${aRate.toFixed(1)}% → diff=${diff.toFixed(1)}pp → ${k4Status}`);
   }
 
   if (comparison.c) {
@@ -234,7 +200,7 @@ if (!DRY_RUN && Object.keys(allResults).length > 0) {
 
   console.log('\n--- Per-Arm Summary ---');
   for (const [armKey, data] of Object.entries(comparison)) {
-    console.log(`  ${armKey.toUpperCase()} (${data.label}): pass@1=${data.passAt1} | pass@N=${data.passAtN}`);
+    console.log(`  ${armKey.toUpperCase()} (${data.label}): pass@1=${frac(data.passAt1.count, data.passAt1.total)} | pass@N=${frac(data.passAtN.count, data.passAtN.total)}`);
   }
 
   writeFileSync(
@@ -242,14 +208,16 @@ if (!DRY_RUN && Object.keys(allResults).length > 0) {
     JSON.stringify(comparison, null, 2)
   );
 
-  const report = writeCompactReport({
-    summary: summarizeRun({
-      runType: 'pgg-phase1-comparison',
-      baseline: 'multi-arm',
-      k: 'varies',
-      problems,
-      rawResults: allResults,
-    }),
+  const summary = buildMultiArmSummary({
+    runType: 'pgg-phase1-comparison',
+    baseline: 'multi-arm',
+    k: 'varies',
+    problems,
+    rawResults: allResults,
+    armMeta: ARMS,
+  });
+  writeMultiArmReport({
+    summary,
     rawResults: allResults,
     runDir: RUN_DIR,
   });

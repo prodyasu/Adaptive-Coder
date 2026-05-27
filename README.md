@@ -6,6 +6,8 @@
 
 **K0 Kill Test Result (2026-05-26):** gen18 best-of-5 achieves 100% problem-level pass rate vs OS v0's 72.5% (standard) / 60% (stress). The v0 intervention stack (metadata, sig-repair, ICG, informed repair) is **dominated by simple retry**. Every future intervention must be benchmarked against best-of-N, not just single-shot.
 
+**PGG Phase 1 Result (2026-05-27):** Predicate-Gated Generation was active but harmful. PGG-5 scored 10/20 pass@1 (50%) vs best-of-5 at 19/20 (95%); PGG-1 scored 1/4 (25%) vs single-shot at 3/4 (75%). Static assertion injection + rejection sampling is **killed** on this design. See [`references/pgg-phase1-results-2026-05-27.md`](references/pgg-phase1-results-2026-05-27.md).
+
 See [`references/k0-best-of-5-kill-test-2026-05-26.md`](references/k0-best-of-5-kill-test-2026-05-26.md) for full results.
 
 ## What Works
@@ -22,6 +24,7 @@ See [`references/k0-best-of-5-kill-test-2026-05-26.md`](references/k0-best-of-5-
 
 - **OS v0 metadata layer**: Null effect on pass@1 (-5pp delta, within noise). PERM_GRAD explains why: post-hoc annotation cannot move outcomes.
 - **ICG (invariant injection)**: +0pp on stress suite. Prose invariants don't constrain generation.
+- **PGG (Predicate-Gated Generation)**: Killed by Phase 1. PGG-5 50% pass@1 vs best-of-5 95%; PGG-1 25% vs single-shot 75%. Static runnable assertions + rejection sampling added overhead/timeouts and underperformed retry.
 - **Informed repair (R4)**: 0% repair conversion on stress suite (only 3/20 repair-eligible trials). Right mechanism, wrong layer.
 - **Constraint ordering, decomposition, spec quality**: Never validated, never wired.
 
@@ -93,9 +96,9 @@ KNOWLEDGE.md                      — Full project knowledge file
 
 ## Pivot: OP Harness (Next Phase)
 
-Based on the K0 result, the next phase moves from post-hoc annotation to **generation-time constraint injection**:
+Based on the K0 and PGG Phase 1 results, the next phase moves from post-hoc annotation/static assertions to **dynamic, failure-conditioned interventions**:
 
-1. **PGG (Predicate-Gated Generation)**: Generate runnable assertions from specs, reject before verifier if they fail. Rejection sampling with teeth, not prose.
+1. **Dynamic constraint compiler**: Generate runnable assertions only from observed failures, not static curated examples for every problem.
 2. **Diagnostician-in-the-loop**: Agent reads failure traces, classifies failure mode, generates targeted intervention per-class.
 3. **Domain expansion**: Constraint satisfaction / planning problems where semantic constraints have leverage, not just LeetCode.
 4. **Pre-registered kill criteria (K1-K5)**: Each experiment has a null-result threshold before proceeding.
