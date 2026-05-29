@@ -43,12 +43,15 @@ const isDryRun = args.includes('--dry-run');
 const trialsArg = args.find(a => a.startsWith('--trials='));
 const candidatesArg = args.find(a => a.startsWith('--candidates='));
 const problemsArg = args.find(a => a.startsWith('--problems='));
+const modeArg = args.find(a => a.startsWith('--mode='));
 
 const K = trialsArg ? parseInt(trialsArg.split('=')[1]) : 5;           // Independent trials
 const N = candidatesArg ? parseInt(candidatesArg.split('=')[1]) : 5;   // Candidates per trial
 const problems = problemsArg
   ? problemsArg.split('=')[1].split(',')
   : STRESS_PROBLEMS;
+// Mode: 'bo5' = best-of-5 with autorepair (default), 'passAt1' = pure pass@1 baseline (no autorepair)
+const ARM_A_MODE = modeArg ? modeArg.split('=')[1] : 'bo5';
 
 const MODEL = process.env.SHAPER_MODEL || 'minimax-m2.7:cloud';
 const TIMEOUT_MS = parseInt(process.env.EVAL_TIMEOUT_MS || '120000');
@@ -58,11 +61,28 @@ const TIMEOUT_MS = parseInt(process.env.EVAL_TIMEOUT_MS || '120000');
 // ---------------------------------------------------------------------------
 
 async function runBestOf5Trial(problemName) {
-  // This is exactly what evalProblem does: run trials, stop on first pass
-  // But we need ALL attempts for the ranker comparison, so we simulate Bo5
-  // by calling evalProblem once (which internally loops up to MAX_ATTEMPTS)
-  // and recording whether it passed within 5 attempts
+  if (ARM_A_MODE === 'passAt1') {
+    // Pure pass@1 mode: K independent single attempts, each gets maxAttempts=1
+    // Pass@1 = fraction of attempts that pass (same budget as RankEF arm)
+    console.log(`  [pass@1] ${problemName} — single attempt, no autorepair`);
+    const result = await evalProblem(problemName, 'gen18_evolved', MODEL, {
+      traceMaxChars: 4000,
+      maxAttempts: 1,  // Single attempt only — pure pass@1
+    });
+    const attempts = Array.isArray(result) ? result : (result.attempts || [result]);
+    const attempt = attempts[0];
+    // Normalize to same structure as bo5 mode
+    return {
+      pass: attempt?.pass || false,
+      firstPass: attempt,
+      attempts,
+      totalModelMs: attempt?.modelMs || 0,
+      attemptedCount: 1,
+      mode: 'passAt1',
+    };
+  }
   
+  // Bo5 mode (default): run with autorepair (up to MAX_ATTEMPTS retries, stop on first pass)
   console.log(`  [Bo5] ${problemName} — calling evalProblem (stops on first pass)`);
   
   const result = await evalProblem(problemName, 'gen18_evolved', MODEL, {
@@ -70,7 +90,17 @@ async function runBestOf5Trial(problemName) {
     // Bo5 uses the default MAX_ATTEMPTS=5 (autorepair loop, stop on first pass)
   });
 
-  return result;
+  // evalProblem returns an array of attempt records
+  const attempts = Array.isArray(result) ? result : (result.attempts || [result]);
+  const armA_record = {
+    pass: attempts.some(a => a.pass),
+    firstPass: attempts.find(a => a.pass) || attempts[0],
+    attempts,
+    totalModelMs: attempts.reduce((s, a) => s + (a.modelMs || 0), 0),
+    attemptedCount: attempts.length,
+    mode: 'bo5',
+  };
+  return armA_record;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +193,7 @@ async function main() {
   console.log('='.repeat(60));
   console.log(`Rank-EF Experiment (Delta 7 / OP-1)`);
   console.log(`Model: ${MODEL}`);
+  console.log(`Arm A mode: ${ARM_A_MODE === 'passAt1' ? 'pass@1 (single attempt, no autorepair)' : 'Best-of-5 (autorepair, stop on first pass)'}`);
   console.log(`Problems: ${problems.join(', ')}`);
   console.log(`Trials (k): ${K}`);
   console.log(`Candidates (N): ${N}`);
@@ -280,7 +311,8 @@ async function main() {
     const delta = ((bPassAt1Selected - aPassAt1) * 100).toFixed(1);
     
     console.log(`\n  ${problem}:`);
-    console.log(`    Arm A (Bo5):   pass@1 = ${aPassAt1.toFixed(3)} (${armA.filter(r => r.pass).length}/${K})`);
+    const armALabel = ARM_A_MODE === 'passAt1' ? 'pass@1' : 'Bo5';
+    console.log(`    Arm A (${armALabel}):   pass@1 = ${aPassAt1.toFixed(3)} (${armA.filter(r => r.pass).length}/${K})`);
     console.log(`    Arm B (RankEF): pass@1(selected) = ${bPassAt1Selected.toFixed(3)} (${armB.filter(r => r.best?.pass).length}/${K})`);
     console.log(`    Arm B (RankEF): pass@N(any) = ${bPassAtN.toFixed(3)}`);
     console.log(`    Delta: ${delta}pp`);
