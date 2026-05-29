@@ -81,8 +81,21 @@ function parseOllamaResponseText(text) {
   return { ...finalObj, message: { ...(finalObj.message || {}), content } };
 }
 
-export async function callOllama(model, messages, opts = {}) {
-  const { maxTokens = 4000, timeoutMs = 30_000, signal: externalSignal } = opts;
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function normalizeProviderError(err, timeoutMs) {
+  if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError || err instanceof OllamaModelError || err instanceof OllamaNetworkError) {
+    return err;
+  }
+  if (err?.name === 'AbortError' || err instanceof DOMException) {
+    return new OllamaTimeoutError(`${timeoutMs}ms limit`);
+  }
+  return new OllamaNetworkError(err?.message || String(err));
+}
+
+async function callOllamaOnce(model, messages, { maxTokens, timeoutMs, externalSignal }) {
   const { signal, cleanup } = combineSignals(timeoutMs, externalSignal);
 
   try {
@@ -119,14 +132,35 @@ export async function callOllama(model, messages, opts = {}) {
       },
     };
   } catch (err) {
-    if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError || err instanceof OllamaModelError || err instanceof OllamaNetworkError) {
-      throw err;
-    }
-    if (err?.name === 'AbortError' || err instanceof DOMException) {
-      throw new OllamaTimeoutError(`${timeoutMs}ms limit`);
-    }
-    throw new OllamaNetworkError(err?.message || String(err));
+    throw normalizeProviderError(err, timeoutMs);
   } finally {
     cleanup();
   }
+}
+
+export async function callOllama(model, messages, opts = {}) {
+  const {
+    maxTokens = 4000,
+    timeoutMs = 30_000,
+    signal: externalSignal,
+    retryNetworkErrors = Number(process.env.OLLAMA_NETWORK_RETRIES ?? 2),
+    retryBaseDelayMs = Number(process.env.OLLAMA_NETWORK_RETRY_DELAY_MS ?? 750),
+  } = opts;
+
+  const maxRetries = Math.max(0, Number.isFinite(retryNetworkErrors) ? retryNetworkErrors : 0);
+  const baseDelayMs = Math.max(0, Number.isFinite(retryBaseDelayMs) ? retryBaseDelayMs : 0);
+
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callOllamaOnce(model, messages, { maxTokens, timeoutMs, externalSignal });
+    } catch (err) {
+      lastErr = err;
+      const shouldRetry = err instanceof OllamaNetworkError && attempt < maxRetries && !externalSignal?.aborted;
+      if (!shouldRetry) throw err;
+      const delayMs = baseDelayMs * (2 ** attempt);
+      if (delayMs > 0) await sleep(delayMs);
+    }
+  }
+  throw lastErr;
 }
