@@ -960,6 +960,14 @@ export function runBasicTest(problemName, code, { includeHeldOut = true } = {}) 
       `from course_schedule_ii import ${fnName} as f; assert f(1, []) == [0]`,
       `from course_schedule_ii import ${fnName} as f; r = f(3, [[1,0],[2,0]]); assert len(r) == 3 and set(r) == {0,1,2} and r.index(0) < r.index(1) and r.index(0) < r.index(2)`,
     ],
+    "coin-change": [
+      `from coin_change import ${fnName} as f; assert f([1,5,6,9], 11) == 2`,
+      `from coin_change import ${fnName} as f; assert f([2], 3) == -1`,
+      `from coin_change import ${fnName} as f; assert f([1], 0) == 0`,
+      `from coin_change import ${fnName} as f; assert f([1,2,5], 11) == 3`,
+      `from coin_change import ${fnName} as f; assert f([1,2,5], 100) == 20`,
+      `from coin_change import ${fnName} as f; assert f([2,5,10,1], 27) == 4`,
+    ],
     "critical-connections": [
       `from critical_connections import ${fnName} as f; r = f(4, [[0,1],[1,2],[2,0],[1,3]]); assert sorted([sorted(e) for e in r]) == [[1,3]]`,
       `from critical_connections import ${fnName} as f; r = f(2, [[0,1]]); assert sorted([sorted(e) for e in r]) == [[0,1]]`,

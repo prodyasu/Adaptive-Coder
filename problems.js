@@ -98,7 +98,7 @@ export function loadHeldOutProblems() {
     // Stress-suite v2 — discriminative problems (replaced ceiling-hitting v1 suite)
     "edit-distance",                    // DP 2D — base case + recurrence complexity
     "longest-increasing-subsequence",   // DP binary search — optimal structure
-    "course-schedule-ii",                // topological sort — cycle detection + ordering
+    "coin-change",                     // DP unbounded knapsack — greedy trap, 30-50% pass@1
     "critical-connections",              // Tarjan's bridge — dfs, low-link, articulation
   ];
   const heldOut = [];

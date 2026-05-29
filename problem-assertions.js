@@ -98,6 +98,12 @@ export const PGG_ASSERTIONS = {
     { input: '"xyz", ""',    expected: '3',  expr: 'from edit_distance import f; assert f("xyz", "") == 3' },
   ],
 
+  'coin-change': [
+    { input: '[1,2,5], 6',      expected: '2',  expr: 'from coin_change import f; assert f([1,2,5], 6) == 2' },
+    { input: '[2,3], 7',        expected: '3',  expr: 'from coin_change import f; assert f([2,3], 7) == 3' },
+    { input: '[1,6,10], 18',   expected: '3',  expr: 'from coin_change import f; assert f([1,6,10], 18) == 3' },
+  ],
+
   'word-break': [
     { input: '"abcde", ["ab","c","de"]', expected: 'True',  expr: 'from word_break import f; assert f("abcde", ["ab","c","de"]) == True' },
     { input: '"abab", ["ab","aba"]',     expected: 'True',  expr: 'from word_break import f; assert f("abab", ["ab","aba"]) == True' },

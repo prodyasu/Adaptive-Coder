@@ -28,10 +28,11 @@ import { join } from 'path';
 const STRESS_PROBLEMS = [
   'edit-distance',
   'longest-increasing-subsequence',
+  'coin-change',
 ];
 
-// Default: use EDIT_DISTANCE and LIS only (proven discriminative, no ceiling/network issues)
-// course-schedule-ii is ceiling at 100%, critical-connections has network error confounds
+// coin-change replaces course-schedule-ii (ceiling at 100%); coin-change has ~83% greedy-trap
+// discriminative signal ideal for RankEF evaluation
 
 // ---------------------------------------------------------------------------
 // Parse args

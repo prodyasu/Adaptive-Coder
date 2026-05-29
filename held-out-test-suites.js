@@ -98,6 +98,13 @@ export const heldOutTestSuites = {
     { code: 'from course_schedule_ii import ${fnName} as f; assert f(3, [[0,1],[1,2],[2,0]]) == []', desc: 'three-node-cycle' },
     { code: 'from course_schedule_ii import ${fnName} as f; r = f(5, [[2,0],[2,1],[3,2],[4,2]]); assert len(r) == 5 and set(r) == {0,1,2,3,4} and r.index(0) < r.index(2) and r.index(1) < r.index(2) and r.index(2) < r.index(3) and r.index(2) < r.index(4)', desc: 'multiple-prerequisites-and-children' },
   ],
+  'coin-change': [
+    { code: 'from coin_change import ${fnName} as f; assert f([2,5], 7) == 2', desc: 'greedy-trap-optimal-5+2' },
+    { code: 'from coin_change import ${fnName} as f; assert f([1,3,4], 6) == 2', desc: 'greedy-fails-optimal-3+3' },
+    { code: 'from coin_change import ${fnName} as f; assert f([186,419,83,408], 6249) == 20', desc: 'large-amount-dp-required' },
+    { code: 'from coin_change import ${fnName} as f; assert f([1,2], 0) == 0', desc: 'zero-amount-edge' },
+    { code: 'from coin_change import ${fnName} as f; assert f([3,7], 5) == -1', desc: 'impossible-amount' },
+  ],
   'critical-connections': [
     { code: 'from critical_connections import ${fnName} as f; r = f(6, [[0,1],[1,2],[2,0],[1,3],[3,4],[4,5],[5,3]]); assert sorted([sorted(e) for e in r]) == [[1,3]]', desc: 'bridge-between-two-cycles' },
     { code: 'from critical_connections import ${fnName} as f; r = f(4, [[0,1],[1,2],[2,3]]); assert sorted([sorted(e) for e in r]) == [[0,1],[1,2],[2,3]]', desc: 'all-chain-edges-bridges' },
