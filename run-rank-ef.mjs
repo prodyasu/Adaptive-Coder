@@ -66,6 +66,7 @@ async function runBestOf5Trial(problemName) {
   
   const result = await evalProblem(problemName, 'gen18_evolved', MODEL, {
     traceMaxChars: 4000,
+    // Bo5 uses the default MAX_ATTEMPTS=5 (autorepair loop, stop on first pass)
   });
 
   return result;
@@ -88,11 +89,11 @@ async function runRankEfTrial(problemName) {
     console.log(`  [RankEF] ${problemName} — candidate ${i+1}/${N}`);
     
     try {
-      // Each candidate is a fresh pipeline run
-      // We use evalProblem but only take the first attempt
-      // (in practice, we need a single-pipeline call per candidate)
+      // Each RankEF candidate gets a single pipeline attempt — no autorepair loop.
+      // This ensures each candidate is an independent observation for ranking.
       const result = await evalProblem(problemName, 'gen18_evolved', MODEL, {
         traceMaxChars: 4000,
+        maxAttempts: 1,  // Single attempt per candidate for clean ranking
       });
       
       // evalProblem returns { attempts, passed, ... }

@@ -300,12 +300,13 @@ describe('selectBest', () => {
   });
 
   it('selects best failing candidate when no passing candidates exist', () => {
-    const almost = makeAttempt({ candidateIndex: 0, pass: false, primaryPassRate: 0.67, failureKind: 'logic_assertion', failureSubKind: 'off_by_one' });
-    const garbage = makeAttempt({ candidateIndex: 1, pass: false, primaryPassRate: 0.0, failureKind: 'format_protocol' });
+    const a = makeAttempt({ candidateIndex: 0, pass: false, primaryPassRate: 0.0 });
+    const b = makeAttempt({ candidateIndex: 1, pass: false, primaryPassRate: 0.33 });
 
-    const best = selectBest([almost, garbage]);
-    assert.equal(best.pass, false);
-    assert.equal(best.candidateIndex, 0);  // almost-right is better than garbage
+    const best = selectBest([a, b]);
+    // Both fail, but b has higher primaryPassRate → higher logic score → selected
+    assert.equal(best.candidateIndex, 1);
+    assert.equal(best.ranker.allCandidatesFailed, true, 'should flag allCandidatesFailed=true when all fail');
   });
 
   it('attaches ranker metadata to selected candidate', () => {
@@ -317,6 +318,7 @@ describe('selectBest', () => {
     assert.equal(best.ranker.version, RANK_EF_VERSION);
     assert.equal(best.ranker.numCandidates, 2);
     assert.equal(best.ranker.rank, 1);
+    assert.equal(best.ranker.allCandidatesFailed, false, 'should flag allCandidatesFailed=false when some pass');
     assert.ok(Array.isArray(best.ranker.allScores));
     assert.equal(best.ranker.allScores.length, 2);
   });

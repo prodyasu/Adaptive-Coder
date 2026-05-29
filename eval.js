@@ -243,7 +243,8 @@ function buildCoderPrompt(problemName, driftName = null) {
 
 
 export async function evalProblem(problemName, baselineKind, model, opts = {}) {
-  const { signal } = opts;
+  const { signal, maxAttempts } = opts;
+  const effectiveMaxAttempts = maxAttempts || MAX_ATTEMPTS;
   let taskPath = join(__dirname, "../shaper-autorepair/testcases", problemName, "task.txt");
   if (!existsSync(taskPath)) {
     taskPath = join(__dirname, "testcases-expansion", problemName, "task.txt");
@@ -264,7 +265,7 @@ export async function evalProblem(problemName, baselineKind, model, opts = {}) {
 
   const attempts = [];
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < effectiveMaxAttempts; attempt++) {
     let waitMs = 0;
     let autorepairCycles = 0;
     let stageFailed;

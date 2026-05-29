@@ -118,10 +118,10 @@ export function computeLogicScore(attempt) {
   if (v.timeoutFlag)                                          score -= 0.10;
 
   // No self-correction attempted for a failing candidate → mild penalty
-  if (!v.pass && v.autorepairCycles === 0)                   score -= 0.05;
+  if (!v.pass && (v.autorepairCycles ?? 0) === 0)                   score -= 0.05;
 
   // Bonus: autorepair-free clean generation
-  if (attempt.pass && attempt.autorepairCycles === 0)         score += 0.05;
+  if (attempt.pass && (attempt.autorepairCycles ?? 0) === 0)         score += 0.05;
 
   return Math.max(0.0, Math.min(1.0, score));
 }
@@ -174,7 +174,8 @@ export function rankCandidates(attempts, weights = RANK_EF_WEIGHTS) {
     const aRate = a.primaryPassRate ?? 0;
     const bRate = b.primaryPassRate ?? 0;
     if (bRate !== aRate) return bRate - aRate;
-    return (a.modelMs ?? 0) - (b.modelMs ?? 0);
+    // modelMs undefined → Infinity (treated as slowest, not fastest)
+    return (a.modelMs ?? Infinity) - (b.modelMs ?? Infinity);
   });
 
   return scored;
@@ -196,21 +197,22 @@ export function selectBest(attempts, weights = RANK_EF_WEIGHTS) {
 
   // Pass-fail gate: prefer passing candidates over failing ones
   const passing = ranked.filter(c => c.pass);
+  const allCandidatesFailed = passing.length === 0 && ranked.length > 0;
   if (passing.length > 0) {
     // Among passing candidates, the highest-scored one wins
     // (rankCandidates already sorted by score, so passing[0] is best passing)
-    return attachRankerMeta(passing[0], ranked);
+    return attachRankerMeta(passing[0], ranked, { allCandidatesFailed: false });
   }
 
   // No passing candidates: return the best failing candidate
   if (ranked.length === 0) return undefined;
-  return attachRankerMeta(ranked[0], ranked);
+  return attachRankerMeta(ranked[0], ranked, { allCandidatesFailed: true });
 }
 
 /**
  * Attach ranker metadata to the selected candidate for trace auditing.
  */
-function attachRankerMeta(selected, allRanked) {
+function attachRankerMeta(selected, allRanked, flags = {}) {
   return {
     ...selected,
     ranker: {
@@ -220,6 +222,7 @@ function attachRankerMeta(selected, allRanked) {
         .filter(c => c.candidateIndex !== selected.candidateIndex)
         .map(c => c.candidateIndex),
       numCandidates: allRanked.length,
+      allCandidatesFailed: flags.allCandidatesFailed ?? false,
       version: RANK_EF_VERSION,
       allScores: allRanked.map(c => ({
         candidateIndex: c.candidateIndex,
