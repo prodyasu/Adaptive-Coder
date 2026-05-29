@@ -97,9 +97,10 @@ async function runRankEfTrial(problemName) {
         maxAttempts: 1,  // Single attempt per candidate for clean ranking
       });
       
-      // evalProblem returns { attempts, passed, ... }
+      // evalProblem returns an array of attempts (even with maxAttempts: 1)
       // Take the FIRST attempt as the candidate record
-      const firstAttempt = result.attempts?.[0] || result;
+      const attempts = Array.isArray(result) ? result : (result.attempts || [result]);
+      const firstAttempt = attempts[0];
       
       candidates.push({
         candidateIndex: i,
@@ -218,8 +219,17 @@ async function main() {
     const armA_trials = [];
     for (let trial = 0; trial < K; trial++) {
       console.log(`  Trial ${trial+1}/${K}...`);
-      const result = await runBestOf5Trial(problem);
-      armA_trials.push(result);
+      const attempts = await runBestOf5Trial(problem);
+      // evalProblem returns an array of attempt records
+      // Bo5: passed if ANY attempt passed, total model time, first-pass info
+      const armA_record = {
+        pass: attempts.some(a => a.pass),
+        firstPass: attempts.find(a => a.pass) || attempts[0],
+        attempts,
+        totalModelMs: attempts.reduce((s, a) => s + (a.modelMs || 0), 0),
+        attemptedCount: attempts.length,
+      };
+      armA_trials.push(armA_record);
     }
     results.armA[problem] = armA_trials;
     
@@ -246,8 +256,8 @@ async function main() {
     const armA = results.armA[problem];
     const armB = results.armB[problem];
     
-    // Arm A: pass@1 (fraction of trials that passed on first attempt)
-    const aPassAt1 = armA.filter(r => r.pass || r.attempts?.[0]?.pass).length / K;
+    // Arm A: pass@1 (fraction of trials that passed within 5 attempts)
+    const aPassAt1 = armA.filter(r => r.pass).length / K;
     
     // Arm B: pass@1(selected) (fraction of trials where ranker selected a passing candidate)
     const bPassAt1Selected = armB.filter(r => r.best?.pass).length / K;
@@ -261,8 +271,8 @@ async function main() {
     // Arm B: avg modelMs
     const bAvgMs = armB.reduce((sum, r) => sum + (r.best?.modelMs || 0), 0) / K;
     
-    // Arm A: avg modelMs
-    const aTotalMs = armA.reduce((sum, r) => sum + (r.modelMs || 0), 0);
+    // Arm A: total modelMs
+    const aTotalMs = armA.reduce((sum, r) => sum + (r.totalModelMs || 0), 0);
     
     // Arm B: total modelMs (all N candidates)
     const bTotalMs = armB.reduce((sum, r) => sum + r.allCandidates.reduce((s, c) => s + (c.modelMs || 0), 0), 0);
@@ -270,7 +280,7 @@ async function main() {
     const delta = ((bPassAt1Selected - aPassAt1) * 100).toFixed(1);
     
     console.log(`\n  ${problem}:`);
-    console.log(`    Arm A (Bo5):   pass@1 = ${aPassAt1.toFixed(3)} (${armA.filter(r => r.pass || r.attempts?.[0]?.pass).length}/${K})`);
+    console.log(`    Arm A (Bo5):   pass@1 = ${aPassAt1.toFixed(3)} (${armA.filter(r => r.pass).length}/${K})`);
     console.log(`    Arm B (RankEF): pass@1(selected) = ${bPassAt1Selected.toFixed(3)} (${armB.filter(r => r.best?.pass).length}/${K})`);
     console.log(`    Arm B (RankEF): pass@N(any) = ${bPassAtN.toFixed(3)}`);
     console.log(`    Delta: ${delta}pp`);
@@ -299,11 +309,11 @@ async function main() {
     const armB = results.armB[problem];
     
     report.perProblem[problem] = {
-      armA_passAt1: armA.filter(r => r.pass || r.attempts?.[0]?.pass).length / K,
+      armA_passAt1: armA.filter(r => r.pass).length / K,
       armB_passAt1Selected: armB.filter(r => r.best?.pass).length / K,
       armB_passAtN: armB.filter(r => r.allCandidates?.some(c => c.pass)).length / K,
       armB_avgRank: armB.reduce((sum, r) => sum + (r.best?.ranker?.rank || 0), 0) / K,
-      delta_pp: ((armB.filter(r => r.best?.pass).length / K) - (armA.filter(r => r.pass || r.attempts?.[0]?.pass).length / K)) * 100,
+      delta_pp: ((armB.filter(r => r.best?.pass).length / K) - (armA.filter(r => r.pass).length / K)) * 100,
     };
   }
   
