@@ -250,17 +250,9 @@ async function main() {
     const armA_trials = [];
     for (let trial = 0; trial < K; trial++) {
       console.log(`  Trial ${trial+1}/${K}...`);
-      const attempts = await runBestOf5Trial(problem);
-      // evalProblem returns an array of attempt records
-      // Bo5: passed if ANY attempt passed, total model time, first-pass info
-      const armA_record = {
-        pass: attempts.some(a => a.pass),
-        firstPass: attempts.find(a => a.pass) || attempts[0],
-        attempts,
-        totalModelMs: attempts.reduce((s, a) => s + (a.modelMs || 0), 0),
-        attemptedCount: attempts.length,
-      };
-      armA_trials.push(armA_record);
+      const record = await runBestOf5Trial(problem);
+      // runBestOf5Trial already returns a normalized record in both modes
+      armA_trials.push(record);
     }
     results.armA[problem] = armA_trials;
     
