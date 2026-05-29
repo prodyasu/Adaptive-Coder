@@ -18,8 +18,8 @@ A **measurable adaptive coding harness** built around shaper→coder→verifier�
 ## Current Status (2026-05-27)
 
 - **K0 best-of-5 kill test:** gen18 best-of-5 dominates OS v0 single-shot; simple retry is the mandatory baseline.
-- **PGG Phase 1:** static Predicate-Gated Generation is killed. PGG-5 = 10/20 pass@1 (50%) vs best-of-5 = 19/20 (95%); PGG-1 = 1/4 (25%) vs single-shot = 3/4 (75%). PGG fired (46 resamples in Arm C) but hurt via timeout/spec overhead.
-- **Next direction:** do not tune static PGG. Either build a dynamic Diagnostician→targeted constraint compiler loop that only acts after observed failures, or pivot benchmark domains where semantic constraints can plausibly beat retry.
+- **PGG Phase 1 validity revised:** the historical PGG kill run is contaminated by a deterministic PGG filter alias bug. Curated assertions imported `f`, while real generated code used problem signatures (`wordBreak`, `minDistance`, etc.); `pggFilter()` ignored `fnName` for embedded imports and rejected correct code with `ImportError`. See `references/pgg-filter-alias-bug-2026-05-27.md`.
+- **Next direction:** do not trust the old PGG result. First run a small post-fix smoke. Only if PGG still loses without alias failures should we kill static PGG and pivot to dynamic failure-conditioned mechanisms or new domains.
 
 ## Baselines
 

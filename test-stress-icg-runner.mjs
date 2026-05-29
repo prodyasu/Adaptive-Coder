@@ -31,8 +31,8 @@ import {
 
 // ── 1. Constants correct ──────────────────────────────────────────────────
 
-assert.deepStrictEqual(STRESS_PROBLEMS, ['edit-distance', 'word-break', 'detect-cycle', 'valid-sudoku'],
-  'STRESS_PROBLEMS should be the 4 stress-suite problems');
+assert.deepStrictEqual(STRESS_PROBLEMS, ['edit-distance', 'longest-increasing-subsequence', 'course-schedule-ii', 'critical-connections'],
+  'STRESS_PROBLEMS should be the 4 v2 stress-suite problems');
 
 assert.strictEqual(DEFAULT_R4_BASELINE, 'reasoning_os_v0',
   'DEFAULT_R4_BASELINE should be reasoning_os_v0 for ICG mode');

@@ -33,6 +33,34 @@ export const MAX_PGG_RESAMPLES = 10;
 // ---------------------------------------------------------------------------
 
 /**
+ * Rewrite assertion imports so curated assertions can consistently call `f(...)`
+ * while generated code keeps the problem's real signature name.
+ *
+ * Example:
+ *   from word_break import f; assert f(...)
+ * becomes:
+ *   from word_break import wordBreak as f; assert f(...)
+ *
+ * Also handles mixed imports like:
+ *   from detect_cycle import ListNode, f; ...
+ */
+function rewriteAssertionImport(expr, fnName) {
+  if (!fnName || fnName === 'f') return expr;
+
+  return expr.replace(/from\s+(\S+)\s+import\s+([^;\n]+)/, (match, moduleName, importList) => {
+    const rewrittenImports = importList.split(',').map(part => {
+      const trimmed = part.trim();
+      if (trimmed === 'f' || trimmed.startsWith('f as ')) {
+        return ` ${fnName} as f`;
+      }
+      return part;
+    }).join(',');
+
+    return `from ${moduleName} import${rewrittenImports}`;
+  });
+}
+
+/**
  * Run PGG assertions against generated code.
  *
  * @param {string} code - Python code from Coder
@@ -72,8 +100,9 @@ export function pggFilter(code, problemName, assertions, fnName) {
     // The assertion.expr already has the full "from module import f; assert ..." form
     let testScript;
     if (assertion.expr.includes('import')) {
-      // Already has import statement embedded
-      testScript = assertion.expr;
+      // Already has import statement embedded. Rewrite any imported `f` alias
+      // to point at the real generated function name before executing.
+      testScript = rewriteAssertionImport(assertion.expr, fnName);
     } else {
       // Build from parts
       testScript = `from ${moduleName} import ${fnName} as f\nassert ${assertion.expr}`;

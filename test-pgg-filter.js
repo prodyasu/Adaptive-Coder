@@ -243,8 +243,18 @@ console.log('Test 9: Bad edit-distance fails filter');
   assert(result.accepted === false, 'bad recursive edit-distance should be rejected');
 }
 
-// Test 10: pggFilterAuto detects function name
-console.log('Test 10: pggFilterAuto detects function name automatically');
+// Test 10: pggFilter works with real generated function names, not just fixture alias f
+console.log('Test 10: pggFilter rewrites assertion import alias for real function names');
+{
+  const realWordBreakName = goodWordBreak.replace('def f(s, wordDict):', 'def wordBreak(s, wordDict):');
+  const assertions = PGG_ASSERTIONS['word-break'];
+  const result = pggFilter(realWordBreakName, 'word-break', assertions, 'wordBreak');
+  assert(result.accepted === true, 'real generated function name should be imported as f for assertions');
+  assert(result.failedCount === 0, 'no failures for DP solution with real function name');
+}
+
+// Test 10b: pggFilterAuto detects function name
+console.log('Test 10b: pggFilterAuto detects function name automatically');
 {
   const assertions = PGG_ASSERTIONS['climbing-stairs'];
   const result = pggFilterAuto(goodClimbingStairs, 'climbing-stairs', assertions);

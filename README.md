@@ -6,7 +6,7 @@
 
 **K0 Kill Test Result (2026-05-26):** gen18 best-of-5 achieves 100% problem-level pass rate vs OS v0's 72.5% (standard) / 60% (stress). The v0 intervention stack (metadata, sig-repair, ICG, informed repair) is **dominated by simple retry**. Every future intervention must be benchmarked against best-of-N, not just single-shot.
 
-**PGG Phase 1 Result (2026-05-27):** Predicate-Gated Generation was active but harmful. PGG-5 scored 10/20 pass@1 (50%) vs best-of-5 at 19/20 (95%); PGG-1 scored 1/4 (25%) vs single-shot at 3/4 (75%). Static assertion injection + rejection sampling is **killed** on this design. See [`references/pgg-phase1-results-2026-05-27.md`](references/pgg-phase1-results-2026-05-27.md).
+**PGG Phase 1 Validity Revision (2026-05-27):** The apparent PGG kill run is contaminated by an assertion import alias bug: curated assertions imported `f`, but real generated code used problem-specific function names. `pggFilter()` ignored `fnName` for embedded imports, causing correct code to be rejected with `ImportError`. Treat the old PGG kill result as invalid until a post-fix smoke/rerun. See [`references/pgg-filter-alias-bug-2026-05-27.md`](references/pgg-filter-alias-bug-2026-05-27.md).
 
 See [`references/k0-best-of-5-kill-test-2026-05-26.md`](references/k0-best-of-5-kill-test-2026-05-26.md) for full results.
 

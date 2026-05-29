@@ -13,7 +13,12 @@ import { INFORMED_REPAIR_MODES } from './informed-repair.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const STRESS_PROBLEMS = ['edit-distance', 'word-break', 'detect-cycle', 'valid-sudoku'];
+export const STRESS_PROBLEMS = [
+  'edit-distance',                // DP 2D — base case + recurrence complexity
+  'longest-increasing-subsequence', // DP binary search — optimal structure
+  'course-schedule-ii',            // topological sort — cycle detection + ordering
+  'critical-connections',          // Tarjan's bridge — dfs, low-link, articulation
+];
 export const DEFAULT_K = 5;
 export const DEFAULT_BASELINE = 'gen18_evolved';
 export const DEFAULT_R4_BASELINE = 'reasoning_os_v0';

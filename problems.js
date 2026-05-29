@@ -95,11 +95,11 @@ export function loadHeldOutProblems() {
     "valid-palindrome",       // two-pointers pattern
     "number-of-islands",      // graph traversal / DFS pattern
     "invert-binary-tree",     // tree recursion pattern
-    // Stress-suite MVP (P1, P3, P4, P7) — failure-rich problems
-    "edit-distance",          // DP 2D — base case + recurrence complexity
-    "word-break",             // DP + string — overlapping subproblems
-    "detect-cycle",           // linked list — Floyd's cycle detection / set invariant
-    "valid-sudoku",           // multi-constraint validation — rows, cols, boxes
+    // Stress-suite v2 — discriminative problems (replaced ceiling-hitting v1 suite)
+    "edit-distance",                    // DP 2D — base case + recurrence complexity
+    "longest-increasing-subsequence",   // DP binary search — optimal structure
+    "course-schedule-ii",                // topological sort — cycle detection + ordering
+    "critical-connections",              // Tarjan's bridge — dfs, low-link, articulation
   ];
   const heldOut = [];
 

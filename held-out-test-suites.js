@@ -87,6 +87,22 @@ export const heldOutTestSuites = {
     { code: 'from edit_distance import ${fnName} as f; assert f("abcdef", "azced") == 3', desc: 'substitution-pattern' },
     { code: 'from edit_distance import ${fnName} as f; assert f("a", "b") == 1', desc: 'single-char-replace' },
   ],
+  'longest-increasing-subsequence': [
+    { code: 'from longest_increasing_subsequence import ${fnName} as f; assert f([]) == 0', desc: 'empty-array' },
+    { code: 'from longest_increasing_subsequence import ${fnName} as f; assert f([4,10,4,3,8,9]) == 3', desc: 'duplicates-and-tail' },
+    { code: 'from longest_increasing_subsequence import ${fnName} as f; assert f([9,8,7,6]) == 1', desc: 'strictly-decreasing' },
+    { code: 'from longest_increasing_subsequence import ${fnName} as f; assert f([2,2,2,3,3,4]) == 3', desc: 'strict-not-nondecreasing' },
+  ],
+  'course-schedule-ii': [
+    { code: 'from course_schedule_ii import ${fnName} as f; r = f(4, [[1,0],[2,0],[3,1],[3,2]]); assert len(r) == 4 and set(r) == {0,1,2,3} and r.index(0) < r.index(1) and r.index(0) < r.index(2) and r.index(1) < r.index(3) and r.index(2) < r.index(3)', desc: 'diamond-dependencies-valid-order' },
+    { code: 'from course_schedule_ii import ${fnName} as f; assert f(3, [[0,1],[1,2],[2,0]]) == []', desc: 'three-node-cycle' },
+    { code: 'from course_schedule_ii import ${fnName} as f; r = f(5, [[2,0],[2,1],[3,2],[4,2]]); assert len(r) == 5 and set(r) == {0,1,2,3,4} and r.index(0) < r.index(2) and r.index(1) < r.index(2) and r.index(2) < r.index(3) and r.index(2) < r.index(4)', desc: 'multiple-prerequisites-and-children' },
+  ],
+  'critical-connections': [
+    { code: 'from critical_connections import ${fnName} as f; r = f(6, [[0,1],[1,2],[2,0],[1,3],[3,4],[4,5],[5,3]]); assert sorted([sorted(e) for e in r]) == [[1,3]]', desc: 'bridge-between-two-cycles' },
+    { code: 'from critical_connections import ${fnName} as f; r = f(4, [[0,1],[1,2],[2,3]]); assert sorted([sorted(e) for e in r]) == [[0,1],[1,2],[2,3]]', desc: 'all-chain-edges-bridges' },
+    { code: 'from critical_connections import ${fnName} as f; r = f(5, [[0,1],[1,2],[2,0],[1,3],[3,4]]); assert sorted([sorted(e) for e in r]) == [[1,3],[3,4]]', desc: 'cycle-with-tail-bridges' },
+  ],
   'word-break': [
     { code: 'from word_break import ${fnName} as f; assert f("aaaaaaa", ["aaaa","aaa"]) == True', desc: 'multiple-segmentations' },
     { code: 'from word_break import ${fnName} as f; assert f("ab", ["a","b","c"]) == True', desc: 'two-letter-tiling' },

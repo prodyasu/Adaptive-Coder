@@ -505,7 +505,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
     shaperResponse = await callOllama(getModelForStage('shaper'), [
       { role: "system", content: SHAPER_PROMPT },
       { role: "user", content: task }
-    ], { timeoutMs: 25_000, signal, maxTokens: 1200 }); // 1200 tokens = ~500-800 words JSON, enough for spec
+    ], { timeoutMs: TIMEOUT_MS, signal, maxTokens: 1200 }); // 1200 tokens = ~500-800 words JSON, enough for spec
   } catch (err) {
     if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError) {
       const delay = err instanceof OllamaTimeoutError ? TIMEOUT_BACKOFF_MS[0] : RATE_LIMIT_DELAY_MS;
@@ -611,7 +611,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
         coderResponse = await callOllama(getModelForStage('coder'), [
           { role: "system", content: coderPromptWithPgg },
           { role: "user", content: userPrompt }
-        ], { timeoutMs: 25_000, signal, maxTokens: 4000 }); // 4000 tokens enough for code solutions
+        ], { timeoutMs: TIMEOUT_MS, signal, maxTokens: 4000 }); // 4000 tokens enough for code solutions
       } catch (err) {
         if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError) {
           const delay = err instanceof OllamaTimeoutError ? (TIMEOUT_BACKOFF_MS[coderAttempt] ?? 20_000) : RATE_LIMIT_DELAY_MS;
@@ -786,7 +786,7 @@ async function runPipeline(problemName, task, baselineKind, model, signal, ctx) 
       verifierResponse = await callOllama(getModelForStage('verifier'), [
         { role: "system", content: VERIFIER_PROMPT },
         { role: "user", content: `TaskSpec:\n${JSON.stringify(spec, null, 2)}\n\nCode:\n${code}` }
-      ], { timeoutMs: 25_000, signal, maxTokens: 1000 }); // 1000 tokens enough for JSON verdict
+      ], { timeoutMs: TIMEOUT_MS, signal, maxTokens: 1000 }); // 1000 tokens enough for JSON verdict
     } catch (err) {
       if (err instanceof OllamaTimeoutError || err instanceof OllamaRateLimitError) {
         const delay = err instanceof OllamaTimeoutError ? (TIMEOUT_BACKOFF_MS[coderAttempt] ?? 20_000) : RATE_LIMIT_DELAY_MS;
@@ -936,27 +936,34 @@ export function runBasicTest(problemName, code, { includeHeldOut = true } = {}) 
     "invert-binary-tree": [
       `from invert_binary_tree import ${fnName} as f, TreeNode; r = f(TreeNode(4, TreeNode(2, TreeNode(1), TreeNode(3)), TreeNode(7, TreeNode(6), TreeNode(9)))); assert r.val == 4 and r.left.val == 7 and r.right.val == 2`,
     ],
-    // --- Stress-suite MVP problems (P1, P3, P4, P7) ---
+    // --- Stress-suite v2 — discriminative problems (replaced ceiling-hitting v1) ---
     "edit-distance": [
       `from edit_distance import ${fnName} as f; assert f("horse", "ros") == 3`,
       `from edit_distance import ${fnName} as f; assert f("intention", "execution") == 5`,
       `from edit_distance import ${fnName} as f; assert f("", "abc") == 3`,
       `from edit_distance import ${fnName} as f; assert f("abc", "") == 3`,
+      `from edit_distance import ${fnName} as f; assert f("abc", "abc") == 0`,
+      `from edit_distance import ${fnName} as f; assert f("a", "b") == 1`,
     ],
-    "word-break": [
-      `from word_break import ${fnName} as f; assert f("leetcode", ["leet","code"]) == True`,
-      `from word_break import ${fnName} as f; assert f("applepenapple", ["apple","pen"]) == True`,
-      `from word_break import ${fnName} as f; assert f("catsandog", ["cats","dog","sand","and","cat"]) == False`,
+    "longest-increasing-subsequence": [
+      `from longest_increasing_subsequence import ${fnName} as f; assert f([10,9,2,5,3,7,101,18]) == 4`,
+      `from longest_increasing_subsequence import ${fnName} as f; assert f([0,1,0,3,2,3]) == 4`,
+      `from longest_increasing_subsequence import ${fnName} as f; assert f([7,7,7,7,7,7,7]) == 1`,
+      `from longest_increasing_subsequence import ${fnName} as f; assert f([1,3,6,7,9,4,10,5,6]) == 6`,
+      `from longest_increasing_subsequence import ${fnName} as f; assert f([1]) == 1`,
     ],
-    "detect-cycle": [
-      `from detect_cycle import ListNode, ${fnName} as f; n3=ListNode(0); n2=ListNode(2); n1=ListNode(3,n2); n0=ListNode(-4,n3); n3.next=n0; n2.next=n3; assert f(n1) == True`,
-      `from detect_cycle import ListNode, ${fnName} as f; assert f(None) == False`,
-      `from detect_cycle import ListNode, ${fnName} as f; assert f(ListNode(1)) == False`,
+    "course-schedule-ii": [
+      `from course_schedule_ii import ${fnName} as f; r = f(4, [[1,0],[2,0],[3,1],[3,2]]); assert len(r) == 4 and set(r) == {0,1,2,3}`,
+      `from course_schedule_ii import ${fnName} as f; r = f(2, [[1,0]]); assert r == [0,1] or r == [0,1]`,
+      `from course_schedule_ii import ${fnName} as f; assert f(2, [[1,0],[0,1]]) == []`,
+      `from course_schedule_ii import ${fnName} as f; assert f(1, []) == [0]`,
+      `from course_schedule_ii import ${fnName} as f; r = f(3, [[1,0],[2,0]]); assert len(r) == 3 and set(r) == {0,1,2} and r.index(0) < r.index(1) and r.index(0) < r.index(2)`,
     ],
-    "valid-sudoku": [
-      `from valid_sudoku import ${fnName} as f; b=[["5","3",".",".","7",".",".",".","."],["6",".",".","1","9","5",".",".","."],[".","9","8",".",".",".",".","6","."],["8",".",".",".","6",".",".",".","3"],["4",".",".","8",".","3",".",".","1"],["7",".",".",".","2",".",".",".","6"],[".","6",".",".",".",".","2","8","."],[".",".",".","4","1","9",".",".","5"],[".",".",".",".","8",".",".","7","9"]]; assert f(b) == True`,
-      `from valid_sudoku import ${fnName} as f; b=[["8","3",".",".","7",".",".",".","."],["6",".",".","1","9","5",".",".","."],[".","9","8",".",".",".",".","6","."],["8",".",".",".","6",".",".",".","3"],["4",".",".","8",".","3",".",".","1"],["7",".",".",".","2",".",".",".","6"],[".","6",".",".",".",".","2","8","."],[".",".",".","4","1","9",".",".","5"],[".",".",".",".","8",".",".","7","9"]]; assert f(b) == False`,
-      `from valid_sudoku import ${fnName} as f; b=[[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."],[".",".",".",".",".",".",".",".","."]]; assert f(b) == True`,
+    "critical-connections": [
+      `from critical_connections import ${fnName} as f; r = f(4, [[0,1],[1,2],[2,0],[1,3]]); assert sorted([sorted(e) for e in r]) == [[1,3]]`,
+      `from critical_connections import ${fnName} as f; r = f(2, [[0,1]]); assert sorted([sorted(e) for e in r]) == [[0,1]]`,
+      `from critical_connections import ${fnName} as f; r = f(3, [[0,1],[1,2],[2,0]]); assert r == []`,
+      `from critical_connections import ${fnName} as f; r = f(5, [[0,1],[1,2],[2,3],[3,4]]); assert sorted([sorted(e) for e in r]) == [[0,1],[1,2],[2,3],[3,4]]`,
     ],
   };
 
