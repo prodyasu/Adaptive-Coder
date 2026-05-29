@@ -234,6 +234,36 @@ function attachRankerMeta(selected, allRanked, flags = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Adaptive early stop
+// ---------------------------------------------------------------------------
+
+/**
+ * Decide whether to stop generating candidates early.
+ *
+ * Strategy: if a candidate has a high heuristic score AND passes primary tests,
+ * we've found a strong solution and can skip remaining candidates.
+ *
+ * @param {Object} attempt — candidate attempt record (with rankerScore attached)
+ * @param {Object} opts — options: { confidenceThreshold: 0.85, requirePass: true }
+ * @returns {boolean} — true if we should stop early
+ */
+export function shouldEarlyStop(attempt, opts = {}) {
+  const {
+    confidenceThreshold = 0.85,
+    requirePass = true,
+  } = opts;
+
+  if (!attempt) return false;
+
+  // Must pass primary tests to consider early stop
+  if (requirePass && !attempt.pass) return false;
+
+  // Score must exceed confidence threshold
+  const score = attempt.rankerScore ?? heuristicScore(attempt);
+  return score >= confidenceThreshold;
+}
+
+// ---------------------------------------------------------------------------
 // Batch evaluation entry point (for runner scripts)
 // ---------------------------------------------------------------------------
 

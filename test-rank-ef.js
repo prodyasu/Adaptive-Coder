@@ -19,6 +19,7 @@ import {
   heuristicScore,
   rankCandidates,
   selectBest,
+  shouldEarlyStop,
   buildRankEfSummary,
   RANK_EF_VERSION,
   RANK_EF_WEIGHTS,
@@ -407,6 +408,66 @@ describe('RankEF vs best-of-5 scenario', () => {
     const best = selectBest([failing, passing]);
     assert.equal(best.candidateIndex, 1, 'Pass-fail gate should prefer the passing candidate');
     assert.equal(best.pass, true);
+  });
+});
+
+// ===========================================================================
+// shouldEarlyStop tests
+// ===========================================================================
+
+describe('shouldEarlyStop', () => {
+  it('returns false for null/undefined attempt', () => {
+    assert.equal(shouldEarlyStop(null), false);
+    assert.equal(shouldEarlyStop(undefined), false);
+  });
+
+  it('returns false for failing candidate (requirePass=true)', () => {
+    const failing = makeAttempt({ pass: false, primaryPassRate: 0.0 });
+    assert.equal(shouldEarlyStop(failing), false);
+  });
+
+  it('returns false for low-score passing candidate', () => {
+    // primaryPassRate=0.5 with no PGG, unknown held-out → logic ~0.5, total well below 0.85
+    const weak = makeAttempt({ pass: true, primaryPassRate: 0.5, pgg: null, heldOutPassRate: null, cohAtrRisk: null });
+    const score = heuristicScore(weak);
+    assert.ok(score < 0.85, `Score ${score.toFixed(4)} should be below 0.85`);
+    assert.equal(shouldEarlyStop(weak), false);
+  });
+
+  it('returns true for high-confidence passing candidate', () => {
+    // Perfect pass, PGG accepted, clean → score well above 0.85
+    const strong = makeAttempt({
+      pass: true,
+      primaryPassRate: 1.0,
+      modelMs: 3000,
+      autorepairCycles: 0,
+      pgg: { accepted: true, failedCount: 0, totalCount: 3, resampleNumber: 0, exhausted: false },
+    });
+    const score = heuristicScore(strong);
+    assert.ok(score >= 0.85, `Score ${score} should be >= 0.85`);
+    assert.equal(shouldEarlyStop(strong), true);
+  });
+
+  it('respects custom confidence threshold', () => {
+    // primaryPassRate=0.70, no PGG, unknown held-out → heuristicScore ~0.84 (below 0.85, above 0.50)
+    const moderate = makeAttempt({ pass: true, primaryPassRate: 0.70, pgg: null, heldOutPassRate: null, cohAtrRisk: null });
+    const score = heuristicScore(moderate);
+    // With default threshold (0.85), should NOT early-stop (0.84 < 0.85)
+    assert.equal(shouldEarlyStop(moderate, { confidenceThreshold: 0.85 }), false);
+    // With lower threshold (0.50), SHOULD early-stop (0.84 > 0.50)
+    assert.equal(shouldEarlyStop(moderate, { confidenceThreshold: 0.50 }), true);
+  });
+
+  it('returns true for failing candidate when requirePass=false', () => {
+    const failing = makeAttempt({ pass: false, primaryPassRate: 0.83 });
+    assert.equal(shouldEarlyStop(failing, { requirePass: false, confidenceThreshold: 0.70 }), true);
+  });
+
+  it('uses pre-computed rankerScore when available', () => {
+    const candidate = makeAttempt({ pass: true, primaryPassRate: 0.5 });
+    // Attach a high rankerScore that would pass the threshold
+    candidate.rankerScore = 0.95;
+    assert.equal(shouldEarlyStop(candidate), true);
   });
 });
 
